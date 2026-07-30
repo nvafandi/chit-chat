@@ -14,5 +14,10 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     open: true,
+    // Izinkan host domain Anda
+    allowedHosts: [
+      'nurvan.web.id',
+      '.nurvan.web.id' // Mengizinkan semua subdomain (seperti immich.nurvan.web.id, dll)
+    ],
   },
 })
