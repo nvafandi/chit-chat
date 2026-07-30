@@ -1,6 +1,6 @@
 import { deleteAllCookies } from './cookieService'
-import { useAuthStore } from '@/stores/authStore'
-import { useChatStore } from '@/stores/chatStore'
+import { authStore } from '@/stores/authStore'
+import { chatStore } from '@/stores/chatStore'
 import { APP_VERSION_KEY, APP_VERSION } from '@/utils/const'
 
 /**
@@ -45,9 +45,6 @@ export function clearAllStorage(): void {
   deleteAllCookies()
 
   // Clear pinia stores
-  const authStore = useAuthStore()
-  const chatStore = useChatStore()
-
   authStore.logout()
   chatStore.unsubscribeFromUpdates()
   chatStore.setMessages([])
