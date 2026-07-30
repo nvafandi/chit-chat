@@ -1,0 +1,38 @@
+{
+  "name": "yang-ga-punya-wa",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "clean": "node src/scripts/cleanDatabase.js",
+    "clean:all": "node src/scripts/cleanDatabase.js all",
+    "clean:users": "node src/scripts/cleanDatabase.js users",
+    "clean:messages": "node src/scripts/cleanDatabase.js messages"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "@mdi/js": "^7.4.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "browser-image-compression": "^2.0.2",
+    "firebase": "^10.14.1",
+    "pako": "^2.1.0",
+    "pinia": "^2.1.0",
+    "uuid": "^9.0.1",
+    "vue": "^3.5.30",
+    "vue-router": "^4.2.0",
+    "vuetify": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "@types/uuid": "^11.0.0",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "@vue/tsconfig": "^0.9.0",
+    "sass": "^1.69.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0",
+    "vue-tsc": "^3.2.5"
+  }
+}
