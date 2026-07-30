@@ -4,6 +4,9 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // TAMBAHKAN BARIS INI (Wajib untuk subpath deployment)
+  base: '/chit-chat/',
+
   plugins: [vue()],
   resolve: {
     alias: {
@@ -14,10 +17,9 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     open: true,
-    // Izinkan host domain Anda
     allowedHosts: [
       'nurvan.web.id',
-      '.nurvan.web.id' // Mengizinkan semua subdomain (seperti immich.nurvan.web.id, dll)
+      '.nurvan.web.id'
     ],
   },
 })
