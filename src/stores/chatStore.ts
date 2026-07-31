@@ -1,77 +1,88 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
 import type { Message, User } from '@/types'
+import { useSyncExternalStore } from 'react'
 
-export const useChatStore = defineStore('chat', () => {
-  const messages = ref<Message[]>([])
-  const users = ref<User[]>([])
-  const totalMessageCount = ref<number>(0)
-  const isLoading = ref(false)
-  const error = ref<string | null>(null)
-  const notificationsEnabled = ref(false)
-  const lastNotifiedMessageId = ref<string | null>(null)
-  let unsubscribeMessages: (() => void) | null = null
-  let unsubscribeUsers: (() => void) | null = null
-  let unsubscribeMessageCount: (() => void) | null = null
+interface ChatState {
+  messages: Message[]
+  users: User[]
+  totalMessageCount: number
+  isLoading: boolean
+  error: string | null
+  notificationsEnabled: boolean
+  lastNotifiedMessageId: string | null
+}
 
-  function setMessages(newMessages: Message[]) {
-    messages.value = newMessages
-  }
+const listeners = new Set<() => void>()
+let state: ChatState = {
+  messages: [],
+  users: [],
+  totalMessageCount: 0,
+  isLoading: false,
+  error: null,
+  notificationsEnabled: false,
+  lastNotifiedMessageId: null,
+}
 
-  // ✅ PRODUCTION FIX #1: Diff-based sync to preserve DOM nodes
-  // Prevents unnecessary re-renders and scroll position resets
-  function syncMessages(newMessages: Message[]) {
-    // Use splice to preserve DOM nodes instead of full replace
-    // This is more DOM-friendly than direct assignment
-    const oldLength = messages.value.length
-    const newLength = newMessages.length
+let unsubscribeMessages: (() => void) | null = null
+let unsubscribeUsers: (() => void) | null = null
+let unsubscribeMessageCount: (() => void) | null = null
 
-    if (oldLength === 0) {
-      messages.value = newMessages
-    } else if (newLength === 0) {
-      messages.value.splice(0, oldLength)
-    } else {
-      // Replace content while preserving Vue reactivity
-      messages.value.splice(0, oldLength, ...newMessages)
+function emit() {
+  listeners.forEach(l => l())
+}
+
+export const chatStore = {
+  getState() {
+    return state
+  },
+  subscribe(listener: () => void) {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
     }
-  }
-
-  function addMessage(message: Message) {
-    messages.value.push(message)
-  }
-
-  function prependMessages(newMessages: Message[]) {
-    messages.value.unshift(...newMessages)
-  }
-
-  function updateMessageHidden(messageId: string, hidden: boolean) {
-    const message = messages.value.find(m => m.id === messageId)
-    if (message) {
-      message.hidden = hidden
+  },
+  setMessages(newMessages: Message[]) {
+    state = { ...state, messages: newMessages }
+    emit()
+  },
+  syncMessages(newMessages: Message[]) {
+    state = { ...state, messages: newMessages }
+    emit()
+  },
+  addMessage(message: Message) {
+    state = { ...state, messages: [...state.messages, message] }
+    emit()
+  },
+  prependMessages(newMessages: Message[]) {
+    state = { ...state, messages: [...newMessages, ...state.messages] }
+    emit()
+  },
+  updateMessageHidden(messageId: string, hidden: boolean) {
+    state = {
+      ...state,
+      messages: state.messages.map(m => m.id === messageId ? { ...m, hidden } : m)
     }
-  }
-
-  function setUsers(newUsers: User[]) {
-    users.value = newUsers
-  }
-
-  function setLoading(loading: boolean) {
-    isLoading.value = loading
-  }
-
-  function setError(err: string | null) {
-    error.value = err
-  }
-
-  function clearError() {
-    error.value = null
-  }
-
-  function subscribeToUpdates(callback: (messages: Message[]) => void) {
+    emit()
+  },
+  setUsers(newUsers: User[]) {
+    state = { ...state, users: newUsers }
+    emit()
+  },
+  setLoading(loading: boolean) {
+    state = { ...state, isLoading: loading }
+    emit()
+  },
+  setError(err: string | null) {
+    state = { ...state, error: err }
+    emit()
+  },
+  clearError() {
+    state = { ...state, error: null }
+    emit()
+  },
+  subscribeToUpdates(callback: (messages: Message[]) => void) {
     return callback
-  }
-
-  function unsubscribeFromUpdates() {
+  },
+  unsubscribeFromUpdates() {
     if (unsubscribeMessages) {
       unsubscribeMessages()
       unsubscribeMessages = null
@@ -84,56 +95,50 @@ export const useChatStore = defineStore('chat', () => {
       unsubscribeMessageCount()
       unsubscribeMessageCount = null
     }
-  }
-
-  function setUnsubscribe(fn: () => void) {
+  },
+  setUnsubscribe(fn: () => void) {
     unsubscribeMessages = fn
-  }
-
-  function setUnsubscribeUsers(fn: () => void) {
+  },
+  setUnsubscribeUsers(fn: () => void) {
     unsubscribeUsers = fn
-  }
-
-  function setUnsubscribeMessageCount(fn: () => void) {
+  },
+  setUnsubscribeMessageCount(fn: () => void) {
     unsubscribeMessageCount = fn
+  },
+  setMessageCount(count: number) {
+    state = { ...state, totalMessageCount: count }
+    emit()
+  },
+  setNotificationsEnabled(enabled: boolean) {
+    state = { ...state, notificationsEnabled: enabled }
+    emit()
+  },
+  setLastNotifiedMessageId(messageId: string | null) {
+    state = { ...state, lastNotifiedMessageId: messageId }
+    emit()
   }
+}
 
-  function setMessageCount(count: number) {
-    totalMessageCount.value = count
-  }
-
-  function setNotificationsEnabled(enabled: boolean) {
-    notificationsEnabled.value = enabled
-  }
-
-  function setLastNotifiedMessageId(messageId: string | null) {
-    lastNotifiedMessageId.value = messageId
-  }
-
+export function useChatStore() {
+  const currentState = useSyncExternalStore(chatStore.subscribe, chatStore.getState)
   return {
-    messages,
-    users,
-    totalMessageCount,
-    isLoading,
-    error,
-    notificationsEnabled,
-    lastNotifiedMessageId,
-    setMessages,
-    syncMessages,
-    addMessage,
-    prependMessages,
-    updateMessageHidden,
-    setUsers,
-    setLoading,
-    setError,
-    clearError,
-    subscribeToUpdates,
-    unsubscribeFromUpdates,
-    setUnsubscribe,
-    setUnsubscribeUsers,
-    setUnsubscribeMessageCount,
-    setMessageCount,
-    setNotificationsEnabled,
-    setLastNotifiedMessageId,
+    ...currentState,
+    setMessages: chatStore.setMessages,
+    syncMessages: chatStore.syncMessages,
+    addMessage: chatStore.addMessage,
+    prependMessages: chatStore.prependMessages,
+    updateMessageHidden: chatStore.updateMessageHidden,
+    setUsers: chatStore.setUsers,
+    setLoading: chatStore.setLoading,
+    setError: chatStore.setError,
+    clearError: chatStore.clearError,
+    subscribeToUpdates: chatStore.subscribeToUpdates,
+    unsubscribeFromUpdates: chatStore.unsubscribeFromUpdates,
+    setUnsubscribe: chatStore.setUnsubscribe,
+    setUnsubscribeUsers: chatStore.setUnsubscribeUsers,
+    setUnsubscribeMessageCount: chatStore.setUnsubscribeMessageCount,
+    setMessageCount: chatStore.setMessageCount,
+    setNotificationsEnabled: chatStore.setNotificationsEnabled,
+    setLastNotifiedMessageId: chatStore.setLastNotifiedMessageId,
   }
-})
+}

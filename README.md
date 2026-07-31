@@ -1,22 +1,22 @@
 # yang ga punya WA - Real-time Chat Application
 
-A modern real-time chat application built with Vue 3, TypeScript, Pinia, Vuetify, and Firebase.
+A modern real-time chat application built with React, TypeScript, Vite, and Firebase.
 
 ## Features
 
 - ✨ Real-time messaging with Firebase Firestore
-- 🔐 User authentication and session management with localStorage
+- 🔐 User authentication and cookie-based session management
 - 💾 Persistent sessions with UUID generation
-- 🎨 Beautiful UI with Vuetify
+- 🎨 Responsive chat UI with Material Design Icons
 - 📱 Responsive design
 - 🚀 Fast and performant with Vite
 - 🔄 Real-time updates without page refresh
 
 ## Tech Stack
 
-- **Frontend Framework:** Vue 3 with Composition API
-- **State Management:** Pinia
-- **UI Framework:** Vuetify 3
+- **Frontend Framework:** React 19
+- **Routing:** React Router
+- **State Management:** Lightweight React external stores
 - **Build Tool:** Vite
 - **Database:** Firebase Firestore
 - **Language:** TypeScript
@@ -26,21 +26,21 @@ A modern real-time chat application built with Vue 3, TypeScript, Pinia, Vuetify
 
 ```
 src/
-├── components/          # Reusable Vue components
-├── router/             # Vue Router configuration
+├── components/          # Reusable React components
+├── router/             # React Router configuration
 ├── services/           # Firebase and session services
 │   ├── firebase.ts    # Firebase operations
 │   └── session.ts     # Session management
-├── stores/            # Pinia stores
+├── stores/            # Application stores
 │   ├── authStore.ts   # User authentication state
 │   └── chatStore.ts   # Chat messages state
 ├── types/             # TypeScript interfaces
 │   └── index.ts       # Type definitions
 ├── views/             # Page components
-│   ├── CreateAccount.vue  # User registration
-│   └── Chat.vue           # Main chat interface
-├── App.vue            # Root component
-├── main.ts            # Application entry point
+│   ├── CreateAccount.tsx  # User registration
+│   └── Chat.tsx           # Main chat interface
+├── App.tsx            # Root component
+├── main.tsx           # Application entry point
 └── style.css          # Global styles
 ```
 
@@ -102,7 +102,7 @@ npm run preview
 1. **First Visit:**
    - Users see the Create Account page
    - Enter a username and create an account
-   - Session is saved to localStorage with UUID and username
+   - Session is saved in a browser cookie with the user ID and username
 
 2. **Chat:**
    - After account creation, users are redirected to the chat page
@@ -111,7 +111,7 @@ npm run preview
    - Click logout to clear session and return to account creation
 
 3. **Session Persistence:**
-   - Session is stored in localStorage
+   - Session is stored in a browser cookie
    - Refresh the page and remain logged in
    - Close and reopen the browser - session persists
    - Click logout to clear the session
@@ -124,7 +124,7 @@ npm run preview
 - Messages are automatically scrolled to the latest
 
 ### Session Management
-- User session stored in localStorage
+- User session stored in a browser cookie
 - Contains username and UUID
 - Auto-initializes on app load
 - Middleware protects chat route from unauthorized access
@@ -134,7 +134,7 @@ npm run preview
 - `chatStore`: Manages messages and real-time subscriptions
 
 ### Route Protection
-- Router guard checks if user is authenticated
+- Protected React routes check whether the session is authenticated
 - Redirects to Create Account if not logged in
 - Redirects to Chat if already logged in
 
@@ -181,10 +181,14 @@ Contributions are welcome! Feel free to submit issues and pull requests.
 - **Solution:** Check Firebase configuration and ensure Firestore rules allow read access
 
 **Issue:** Session not persisting
-- **Solution:** Check if localStorage is enabled in browser
+- **Solution:** Check whether cookies are enabled in the browser
 
 **Issue:** "Username already taken" error
 - **Solution:** Choose a different username or clear browser data
 
 **Issue:** Real-time updates not working
 - **Solution:** Ensure Firebase connection is stable and Firestore is properly configured
+
+## Credit
+
+Inspired by and credited to [natadekoko-rin](https://github.com/natadekoko-rin).

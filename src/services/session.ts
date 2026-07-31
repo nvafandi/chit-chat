@@ -83,7 +83,7 @@ export function saveSession(session: SessionData): void {
 export function getSession(): SessionData | null {
   if (!hasCookie(SESSION_COOKIE_NAME)) {
     // No cookie found - user must login explicitly
-    // Migration will only happen during login in CreateAccount.vue
+    // Migration will only happen during login in CreateAccount.tsx
     return null
   }
 
