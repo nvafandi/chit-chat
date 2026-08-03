@@ -12,7 +12,7 @@ import {
   hideMessage, 
   getMessagesBefore 
 } from '@/services/firebase'
-import { uploadImage, uploadFile } from '@/services/supabase'
+import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
 import { validateSession } from '@/services/session'
 import { clearAllStorage } from '@/services/storageCleanup'
@@ -39,6 +39,7 @@ import { isCurlRequest, getCurlCopyableText } from '@/utils/curlFormatter'
 import { detectContentType, hasFormattedContent } from '@/utils/jsonFormatter'
 import { containsMentions, insertMention, extractMentions } from '@/utils/mentionFormatter'
 import { isStickerMessage } from '@/utils/stickers'
+import ResolvedImage from '@/components/ResolvedImage'
 import CurlMessage from '@/components/CurlMessage'
 import JsonMessage from '@/components/JsonMessage'
 import QueryMessage from '@/components/QueryMessage'
@@ -90,6 +91,7 @@ export const Chat: React.FC = () => {
   const [isCompressing, setIsCompressing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<number[]>([])
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null)
   
   const [isGlobalDragover, setIsGlobalDragover] = useState(false)
   
@@ -475,22 +477,27 @@ export const Chat: React.FC = () => {
     setShowImageModal(true)
   }
 
-  const downloadFile = (fileUrl: string | undefined, fileName: string | undefined) => {
-    if (!fileUrl) return
-    fetch(fileUrl)
-      .then(response => response.blob())
-      .then(blob => {
-        const blobUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = blobUrl
-        link.download = fileName || 'file'
-        link.click()
-        window.URL.revokeObjectURL(blobUrl)
-      })
-      .catch(err => {
-        console.error('Error downloading file:', err)
-        setError(`Failed to download file: ${err?.message}`)
-      })
+  const downloadFile = async (fileUrl: string | undefined, fileName: string | undefined) => {
+    if (!fileUrl || downloadingFile === fileUrl) return
+    setDownloadingFile(fileUrl)
+    try {
+      // Reassembles split files automatically when the URL points to a chunked manifest
+      const resolved = await resolveChunkedFile(fileUrl)
+      if (!resolved) {
+        throw new Error('Could not fetch the file')
+      }
+      const blobUrl = window.URL.createObjectURL(resolved.blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = resolved.fileName || fileName || 'file'
+      link.click()
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('Error downloading file:', err)
+      setError(`Failed to download file: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setDownloadingFile(null)
+    }
   }
 
   const scrollToMessage = (messageId: string) => {
@@ -1167,7 +1174,7 @@ export const Chat: React.FC = () => {
 
                             {message.imageUrl && !message.hidden && (
                               <div className="image-display mb-2" onClick={() => openImageModal(message.imageUrl!)}>
-                                <img src={message.imageUrl} alt={message.imageName || 'Image'} className="chat-image" />
+                                <ResolvedImage src={message.imageUrl} alt={message.imageName || 'Image'} className="chat-image" />
                               </div>
                             )}
 
@@ -1183,6 +1190,12 @@ export const Chat: React.FC = () => {
                                       </div>
                                     </div>
                                   </div>
+                                  {downloadingFile === message.fileUrl && (
+                                    <div className="download-progress-overlay">
+                                      <div className="download-spinner"></div>
+                                      <span>Downloading…</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1194,7 +1207,7 @@ export const Chat: React.FC = () => {
                                   <div key={att.id}>
                                     {att.type === 'image' ? (
                                       <div className="image-display" onClick={() => openImageModal(att.url)}>
-                                        <img src={att.url} alt={att.name} className="chat-image" />
+                                        <ResolvedImage src={att.url} alt={att.name} className="chat-image" />
                                       </div>
                                     ) : (
                                       <div className="file-card" onClick={() => downloadFile(att.url, att.name)}>
@@ -1207,6 +1220,12 @@ export const Chat: React.FC = () => {
                                             </div>
                                           </div>
                                         </div>
+                                        {downloadingFile === att.url && (
+                                          <div className="download-progress-overlay">
+                                            <div className="download-spinner"></div>
+                                            <span>Downloading…</span>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -1280,7 +1299,10 @@ export const Chat: React.FC = () => {
                       <i className="mdi mdi-close"></i>
                     </button>
                     {isUploading && (
-                      <div className="upload-progress-bar" style={{ width: `${uploadProgress[idx] || 0}%` }}></div>
+                      <div className="upload-progress-overlay">
+                        <span className="upload-progress-percent">{Math.round(uploadProgress[idx] || 0)}%</span>
+                        <div className="upload-progress-bar" style={{ width: `${uploadProgress[idx] || 0}%` }}></div>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1340,7 +1362,7 @@ export const Chat: React.FC = () => {
       {showImageModal && (
         <div className="image-lightbox-modal" onClick={() => setShowImageModal(false)}>
           <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={selectedImageUrl} alt="Preview" />
+            <ResolvedImage src={selectedImageUrl} alt="Preview" />
             <button className="lightbox-close" onClick={() => setShowImageModal(false)}>
               <i className="mdi mdi-close"></i>
             </button>

@@ -2154,6 +2154,8 @@ html.dark .message-input-wrapper:has(.v-field--focused) {
 }
 
 .file-card {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
   border: 1px solid rgba(99, 102, 241, 0.3);
   cursor: pointer;
@@ -2173,6 +2175,82 @@ html.dark .message-input-wrapper:has(.v-field--focused) {
 
 .file-card:hover .file-download-icon {
   transform: none;
+}
+
+/* Download progress overlay (shown while a file is being downloaded/reassembled) */
+.download-progress-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: inherit;
+  z-index: 2;
+  backdrop-filter: blur(2px);
+}
+
+.download-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: downloadSpin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes downloadSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Upload progress overlay (shown while a file is being uploaded/split) */
+.upload-progress-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.upload-progress-percent {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.upload-progress-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 5px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--clr-primary-a0), #60a5fa, var(--clr-primary-a0));
+  background-size: 200% 100%;
+  animation: uploadBarShimmer 1.5s linear infinite;
+  transition: width 0.35s ease;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.7);
+}
+
+@keyframes uploadBarShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .file-name {

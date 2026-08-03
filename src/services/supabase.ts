@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { storeFileMetadata } from '@/utils/fileExpiration'
-import { SUPABASE_URL, SUPABASE_ANON_KEY, CACHE_CONTROL_DURATION } from '@/utils/const'
+import {
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  CACHE_CONTROL_DURATION,
+  FILE_CHUNK_SIZE,
+  FILE_MANIFEST_SIGNATURE,
+  MAX_UPLOAD_FILE_SIZE,
+} from '@/utils/const'
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
@@ -25,61 +32,166 @@ export async function uploadFile(
   onProgress?: (progress: number) => void
 ): Promise<string | null> {
   try {
-    // Create a unique filename to avoid conflicts
-    const timestamp = Date.now()
-    const fileExtension = filename.split('.').pop() || 'file'
-    const uniqueFilename = `${timestamp}-${Math.random().toString(36).substring(7)}.${fileExtension}`
-    const filePath = `public/${uniqueFilename}`
-
-    console.log('📤 Uploading file:', { filename, uniqueFilename, filePath, size: file.size })
-
-    // Simulate progress with intervals (Supabase JS SDK doesn't expose raw progress events)
-    let progress = 0
-    const progressInterval = setInterval(() => {
-      if (progress < 90) {
-        progress += Math.random() * 30
-        if (progress > 90) progress = 90
-        onProgress?.(Math.round(progress))
-      }
-    }, 200)
-
-    // Upload file to Supabase Storage
-    const { error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file, {
-        cacheControl: CACHE_CONTROL_DURATION,
-        upsert: false,
-        contentType: file.type || 'application/octet-stream',
-      })
-
-    clearInterval(progressInterval)
-    onProgress?.(100)
-
-    if (error) {
-      console.error('❌ Error uploading file:', {
-        message: error.message,
-        statusCode: error.statusCode,
-        status: error.status,
-        fullError: error
-      })
-      console.error('📝 Details:', JSON.stringify(error, null, 2))
-      throw new Error(`Upload failed: ${error.message}`)
+    // Files at or above Supabase's 50MB per-object limit are auto-split into chunks.
+    // The returned URL points to a manifest used to reassemble the file on download.
+    if (file.size >= MAX_UPLOAD_FILE_SIZE) {
+      return await uploadChunkedFile(file, filename, bucket, onProgress)
     }
-
-    // Get public URL
-    const { data: publicUrlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(filePath)
-
-    console.log('✅ File uploaded successfully:', publicUrlData.publicUrl)
-    
-    // Store file metadata for expiration tracking (pass MIME type)
-    storeFileMetadata(publicUrlData.publicUrl, Date.now(), filename, file.type)
-
-    return publicUrlData.publicUrl
+    return await uploadSingleFile(file, filename, bucket, onProgress)
   } catch (error) {
     console.error('Upload file error:', error)
     return null
+  }
+}
+
+/**
+ * Upload a file that fits within the 50MB per-object limit in a single request
+ */
+async function uploadSingleFile(
+  file: Blob,
+  filename: string,
+  bucket: string,
+  onProgress?: (progress: number) => void
+): Promise<string | null> {
+  // Create a unique filename to avoid conflicts
+  const timestamp = Date.now()
+  const fileExtension = filename.split('.').pop() || 'file'
+  const uniqueFilename = `${timestamp}-${Math.random().toString(36).substring(7)}.${fileExtension}`
+  const filePath = `public/${uniqueFilename}`
+
+  console.log('📤 Uploading file:', { filename, uniqueFilename, filePath, size: file.size })
+
+  // Simulate progress with intervals (Supabase JS SDK doesn't expose raw progress events)
+  let progress = 0
+  const progressInterval = setInterval(() => {
+    if (progress < 90) {
+      progress += Math.random() * 30
+      if (progress > 90) progress = 90
+      onProgress?.(Math.round(progress))
+    }
+  }, 200)
+
+  // Upload file to Supabase Storage
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(filePath, file, {
+      cacheControl: CACHE_CONTROL_DURATION,
+      upsert: false,
+      contentType: file.type || 'application/octet-stream',
+    })
+
+  clearInterval(progressInterval)
+  onProgress?.(100)
+
+  if (error) {
+    console.error('❌ Error uploading file:', {
+      message: error.message,
+      statusCode: error.statusCode,
+      status: error.status,
+      fullError: error
+    })
+    console.error('📝 Details:', JSON.stringify(error, null, 2))
+    throw new Error(`Upload failed: ${error.message}`)
+  }
+
+  // Get public URL
+  const { data: publicUrlData } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(filePath)
+
+  console.log('✅ File uploaded successfully:', publicUrlData.publicUrl)
+  
+  // Store file metadata for expiration tracking (pass MIME type)
+  storeFileMetadata(publicUrlData.publicUrl, Date.now(), filename, file.type)
+
+  return publicUrlData.publicUrl
+}
+
+/**
+ * Split a large file into chunks (each under the 50MB object limit), upload each chunk,
+ * then upload a JSON manifest that describes how to reassemble the original file.
+ * The manifest's public URL is the value stored in the message.
+ */
+async function uploadChunkedFile(
+  file: Blob,
+  filename: string,
+  bucket: string,
+  onProgress?: (progress: number) => void
+): Promise<string | null> {
+  const timestamp = Date.now()
+  const fileExtension = filename.split('.').pop() || 'file'
+  const uniqueBase = `${timestamp}-${Math.random().toString(36).substring(7)}.${fileExtension}`
+
+  const chunkCount = Math.max(1, Math.ceil(file.size / FILE_CHUNK_SIZE))
+  const chunkUrls: string[] = []
+  const uploadedPaths: string[] = []
+  let manifestPath: string | undefined
+
+  console.log('📤 Splitting large file:', { filename, size: file.size, chunkCount, chunkSize: FILE_CHUNK_SIZE })
+
+  try {
+    for (let i = 0; i < chunkCount; i++) {
+      const start = i * FILE_CHUNK_SIZE
+      const end = Math.min(start + FILE_CHUNK_SIZE, file.size)
+      const chunkBlob = file.slice(start, end)
+      const chunkPath = `public/${uniqueBase}.part-${String(i).padStart(4, '0')}`
+
+      const { error } = await supabase.storage.from(bucket).upload(chunkPath, chunkBlob, {
+        cacheControl: CACHE_CONTROL_DURATION,
+        upsert: false,
+        contentType: 'application/octet-stream',
+      })
+
+      if (error) {
+        throw new Error(`Failed to upload part ${i + 1}/${chunkCount}: ${error.message}`)
+      }
+
+      uploadedPaths.push(chunkPath)
+      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(chunkPath)
+      chunkUrls.push(publicUrlData.publicUrl)
+      onProgress?.(Math.round(((i + 1) / (chunkCount + 1)) * 90))
+    }
+
+    // Upload a manifest describing how to reassemble the original file
+    const manifest = {
+      signature: FILE_MANIFEST_SIGNATURE,
+      fileName: filename,
+      mimeType: file.type || 'application/octet-stream',
+      totalSize: file.size,
+      chunkUrls,
+    }
+    manifestPath = `public/${uniqueBase}.manifest.json`
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' })
+
+    const { error: manifestError } = await supabase.storage.from(bucket).upload(manifestPath, manifestBlob, {
+      cacheControl: CACHE_CONTROL_DURATION,
+      upsert: false,
+      contentType: 'application/json',
+    })
+
+    if (manifestError) {
+      throw new Error(`Failed to upload file manifest: ${manifestError.message}`)
+    }
+
+    const { data: manifestUrlData } = supabase.storage.from(bucket).getPublicUrl(manifestPath)
+    onProgress?.(100)
+
+    storeFileMetadata(manifestUrlData.publicUrl, Date.now(), filename, file.type)
+    console.log('✅ Large file split and uploaded successfully:', {
+      filename,
+      size: file.size,
+      chunkCount,
+      url: manifestUrlData.publicUrl,
+    })
+
+    return manifestUrlData.publicUrl
+  } catch (error) {
+    // Clean up any parts already uploaded to avoid orphaned files
+    const pathsToRemove = manifestPath ? [...uploadedPaths, manifestPath] : uploadedPaths
+    if (pathsToRemove.length > 0) {
+      await supabase.storage.from(bucket).remove(pathsToRemove).catch(() => {})
+    }
+    throw error
   }
 }
 
@@ -97,56 +209,84 @@ export async function uploadImage(
   bucket: string = 'chat-images',
   onProgress?: (progress: number) => void
 ): Promise<string | null> {
+  return uploadFile(file, filename, bucket, onProgress)
+}
+
+/**
+ * Check whether a URL points to a chunked-file manifest
+ * @param fileUrl - Public URL of the file
+ */
+export function isChunkedManifestUrl(fileUrl: string): boolean {
   try {
-    // Create a unique filename to avoid conflicts
-    const timestamp = Date.now()
-    const uniqueFilename = `${timestamp}-${filename}`
-    const filePath = `public/${uniqueFilename}`
+    return new URL(fileUrl).pathname.includes('.manifest.json')
+  } catch {
+    return false
+  }
+}
 
-    // Simulate progress with intervals (Supabase JS SDK doesn't expose raw progress events)
-    let progress = 0
-    const progressInterval = setInterval(() => {
-      if (progress < 90) {
-        progress += Math.random() * 30
-        if (progress > 90) progress = 90
-        onProgress?.(Math.round(progress))
-      }
-    }, 200)
+export interface ResolvedFile {
+  blob: Blob
+  /** Original filename from the manifest, or null when the URL is not a chunked file */
+  fileName: string | null
+}
 
-    // Upload file to Supabase Storage
-    const { error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file, {
-        cacheControl: CACHE_CONTROL_DURATION,
-        upsert: false,
-        contentType: file.type,
-      })
+/**
+ * Resolve a file URL into a download-ready blob.
+ * If the URL points to a chunked-file manifest, all parts are fetched and
+ * reassembled back into a single file.
+ * @param fileUrl - Public URL of the file (regular file or chunked manifest)
+ * @returns Resolved blob (with original name for chunked files) or null on failure
+ */
+export async function resolveChunkedFile(fileUrl: string): Promise<ResolvedFile | null> {
+  try {
+    const response = await fetch(fileUrl)
+    if (!response.ok) {
+      console.error('❌ Failed to fetch file:', fileUrl, response.status)
+      return null
+    }
+    const blob = await response.blob()
 
-    clearInterval(progressInterval)
-    onProgress?.(100)
-
-    if (error) {
-      console.error('❌ Error uploading image:', {
-        message: error.message,
-        statusCode: error.statusCode,
-        status: error.status,
-        fullError: error
-      })
-      console.error('📝 Details:', JSON.stringify(error, null, 2))
-      throw new Error(`Upload failed: ${error.message}`)
+    // Regular (non-chunked) file - return as-is
+    if (!isChunkedManifestUrl(fileUrl)) {
+      return { blob, fileName: null }
     }
 
-    // Get public URL
-    const { data: publicUrlData } = supabase.storage
-      .from(bucket)
-      .getPublicUrl(filePath)
+    const text = await blob.text()
+    let manifest: any = null
+    try {
+      manifest = JSON.parse(text)
+    } catch {
+      // Not valid JSON - return as-is
+      return { blob, fileName: null }
+    }
 
-    // Store file metadata for expiration tracking (pass MIME type)
-    storeFileMetadata(publicUrlData.publicUrl, Date.now(), filename, file.type)
+    if (
+      !manifest ||
+      manifest.signature !== FILE_MANIFEST_SIGNATURE ||
+      !Array.isArray(manifest.chunkUrls) ||
+      manifest.chunkUrls.length === 0
+    ) {
+      return { blob, fileName: null }
+    }
 
-    return publicUrlData.publicUrl
+    console.log('🔗 Reassembling chunked file:', { fileName: manifest.fileName, chunks: manifest.chunkUrls.length })
+
+    const chunks: Blob[] = []
+    for (const chunkUrl of manifest.chunkUrls) {
+      const chunkResponse = await fetch(chunkUrl)
+      if (!chunkResponse.ok) {
+        throw new Error(`Failed to download file part (${chunkResponse.status})`)
+      }
+      chunks.push(await chunkResponse.blob())
+    }
+
+    const combinedBlob = new Blob(chunks, {
+      type: manifest.mimeType || blob.type || 'application/octet-stream',
+    })
+
+    return { blob: combinedBlob, fileName: manifest.fileName || null }
   } catch (error) {
-    console.error('Upload image error:', error)
+    console.error('Resolve chunked file error:', error)
     return null
   }
 }

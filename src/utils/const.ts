@@ -61,6 +61,15 @@ export const MAX_COMPRESSED_FILE_SIZE = 5 * 1024 * 1024
 /** Maximum file size before upload in bytes (50MB) */
 export const MAX_UPLOAD_FILE_SIZE = 50 * 1024 * 1024
 
+/** Hard maximum file size allowed for upload. Files above 50MB are auto-split into chunks. */
+export const MAX_SPLIT_UPLOAD_FILE_SIZE = 2 * 1024 * 1024 * 1024 // 2GB
+
+/** Chunk size used when splitting large files (keeps each object safely under the 50MB limit) */
+export const FILE_CHUNK_SIZE = 45 * 1024 * 1024
+
+/** Signature embedded in chunked-file manifests to identify them during download */
+export const FILE_MANIFEST_SIGNATURE = 'chit-chat-file-manifest'
+
 // ============================================================================
 // FIREBASE CONFIGURATION
 // ============================================================================
