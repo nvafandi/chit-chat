@@ -54,6 +54,12 @@ export interface Message {
     content: string      // Emoji char or image data URL
     name: string         // Sticker name
   }
+  // Shared location data
+  location?: {
+    latitude: number     // Latitude coordinate
+    longitude: number    // Longitude coordinate
+    label?: string       // Optional human-readable address/label
+  }
 }
 
 export interface SessionData {
