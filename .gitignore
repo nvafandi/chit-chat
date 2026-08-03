@@ -68,3 +68,6 @@ Thumbs.db
 *.temp
 *.bak
 *.swp
+
+# TypeScript build info
+*.tsbuildinfo

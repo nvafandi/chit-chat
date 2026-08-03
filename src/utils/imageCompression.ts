@@ -3,7 +3,7 @@
  * Provides maximum compression while maintaining quality
  */
 
-import { MAX_UPLOAD_FILE_SIZE } from '@/utils/const'
+import { MAX_SPLIT_UPLOAD_FILE_SIZE } from '@/utils/const'
 
 export interface CompressionOptions {
   maxWidth?: number       // Default: 1920px
@@ -168,11 +168,11 @@ export function isImage(file: File): boolean {
  * Validate file untuk upload (bisa image atau file lain)
  */
 export function validateFileForUpload(file: File): { valid: boolean; error?: string; isImage: boolean } {
-  if (file.size > MAX_UPLOAD_FILE_SIZE) {
+  if (file.size > MAX_SPLIT_UPLOAD_FILE_SIZE) {
     return {
       valid: false,
       isImage: false,
-      error: `File size (${formatFileSize(file.size)}) exceeds maximum (${formatFileSize(MAX_UPLOAD_FILE_SIZE)})`,
+      error: `File size (${formatFileSize(file.size)}) exceeds maximum (${formatFileSize(MAX_SPLIT_UPLOAD_FILE_SIZE)})`,
     }
   }
 
@@ -188,7 +188,7 @@ export function validateFileForUpload(file: File): { valid: boolean; error?: str
   return { ...imageValidation, isImage: true }
 }
 export function validateImageFile(file: File): { valid: boolean; error?: string } {
-  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB max before compression
+  const MAX_FILE_SIZE = MAX_SPLIT_UPLOAD_FILE_SIZE
 
   if (!file.type.startsWith('image/')) {
     return { valid: false, error: 'File must be an image' }
@@ -197,7 +197,7 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
   if (file.size > MAX_FILE_SIZE) {
     return {
       valid: false,
-      error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum (50MB)`,
+      error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum (${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB)`,
     }
   }
 

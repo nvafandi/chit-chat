@@ -165,7 +165,7 @@
 
                     <!-- Image Display -->
                     <div v-if="message.imageUrl && !message.hidden" class="image-display mb-2" @click="openImageModal(message.imageUrl)">
-                      <img :src="message.imageUrl" :alt="message.imageName || 'Image'" class="chat-image" />
+                      <ResolvedImage :src="message.imageUrl" :alt="message.imageName || 'Image'" class="chat-image" />
                       <v-overlay 
                         contained 
                         class="align-center justify-center"
@@ -195,6 +195,23 @@
                           </div>
                           <v-icon size="x-large" color="primary" opacity="0.5">mdi-chevron-down</v-icon>
                         </v-card-text>
+                        <div v-if="downloadingFile === message.fileUrl" class="download-progress-overlay">
+                          <div class="download-progress-content">
+                            <div class="download-progress-info">
+                              <v-icon size="small" color="white">mdi-download</v-icon>
+                              <span>Downloading… {{ downloadProgress }}%</span>
+                            </div>
+                            <v-progress-linear
+                              :model-value="downloadProgress"
+                              :max="100"
+                              height="6"
+                              rounded
+                              color="primary"
+                              bg-color="rgba(255, 255, 255, 0.25)"
+                              class="mt-1"
+                            />
+                          </div>
+                        </div>
                       </v-card>
                     </div>
 
@@ -210,7 +227,7 @@
                             @click="openImageModal(attachment.url)"
                             :title="attachment.name"
                           >
-                            <img :src="attachment.url" :alt="attachment.name" class="chat-image" />
+                            <ResolvedImage :src="attachment.url" :alt="attachment.name" class="chat-image" />
                             <div class="image-overlay">
                               <v-icon size="large" color="white">mdi-magnify-plus</v-icon>
                             </div>
@@ -240,6 +257,23 @@
                               </div>
                               <v-icon size="x-large" color="primary" opacity="0.5" class="file-download-icon">mdi-chevron-down</v-icon>
                             </v-card-text>
+                            <div v-if="downloadingFile === attachment.url" class="download-progress-overlay">
+                              <div class="download-progress-content">
+                                <div class="download-progress-info">
+                                  <v-icon size="small" color="white">mdi-download</v-icon>
+                                  <span>Downloading… {{ downloadProgress }}%</span>
+                                </div>
+                                <v-progress-linear
+                                  :model-value="downloadProgress"
+                                  :max="100"
+                                  height="6"
+                                  rounded
+                                  color="primary"
+                                  bg-color="rgba(255, 255, 255, 0.25)"
+                                  class="mt-1"
+                                />
+                              </div>
+                            </div>
                           </v-card>
                         </div>
                       </div>
@@ -605,7 +639,7 @@
           </v-btn>
         </v-app-bar>
         <div class="image-modal-content">
-          <img :src="selectedImageUrl" :alt="selectedImageAlt" class="modal-image" />
+          <ResolvedImage :src="selectedImageUrl" :alt="selectedImageAlt" class="modal-image" />
         </div>
       </v-card>
     </v-dialog>
@@ -660,7 +694,7 @@ import { useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import { sendMessage, getMessages, subscribeToMessages, subscribeToUsers, subscribeToMessageCount, getUserById, hideMessage, getMessagesBefore } from '@/services/firebase'
-import { uploadImage, uploadFile } from '@/services/supabase'
+import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
 import { validateSession } from '@/services/session'
 import { clearAllStorage } from '@/services/storageCleanup'
@@ -695,6 +729,7 @@ import MentionMessage from '@/components/MentionMessage.vue'
 import MentionDropdown from '@/components/MentionDropdown.vue'
 import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
+import ResolvedImage from '@/components/ResolvedImage.vue'
 import type { Message, ReplyTo, User } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
@@ -790,6 +825,8 @@ const compressionInfos = ref<CompressionResult[]>([])
 const isCompressing = ref(false)
 const isUploading = ref(false)
 const uploadProgress = ref<number[]>([])  // Track progress for each file (0-100)
+const downloadingFile = ref<string | null>(null)
+const downloadProgress = ref<number>(0)
 const isDragover = ref(false)
 const isGlobalDragover = ref(false)
 const showImageModal = ref(false)
@@ -1236,92 +1273,105 @@ function openImageModal(imageUrl: string) {
   showImageModal.value = true
 }
 
-function downloadImage() {
+async function downloadImage() {
   if (!selectedImageUrl.value) return
   
-  const link = document.createElement('a')
-  link.href = selectedImageUrl.value
-  link.download = 'image'
-  link.click()
+  try {
+    // Reassembles split images automatically when the URL points to a chunked manifest
+    const resolved = await resolveChunkedFile(selectedImageUrl.value)
+    if (!resolved) throw new Error('Could not fetch the file')
+
+    const blobUrl = window.URL.createObjectURL(resolved.blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = resolved.fileName || 'image'
+    link.click()
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    console.error('❌ Error saat mengunduh gambar:', err)
+    error.value = `Gagal mengunduh gambar: ${err instanceof Error ? err.message : 'Unknown error'}`
+  }
 }
 
-function downloadFile(fileUrl: string | undefined, fileName: string | undefined) {
-  if (!fileUrl) {
-    console.warn('⚠️ File URL tidak tersedia')
+async function downloadFile(fileUrl: string | undefined, fileName: string | undefined) {
+  if (!fileUrl || downloadingFile.value === fileUrl) {
     return
   }
   
+  downloadingFile.value = fileUrl
+  downloadProgress.value = 0
   try {
     console.log('📥 Mengunduh file:', { fileName, fileUrl })
     
-    fetch(fileUrl)
-      .then(response => {
-        if (!response.ok) throw new Error('Download failed')
-        return response.blob()
-      })
-      .then(blob => {
-        const blobUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = blobUrl
-        link.download = fileName || 'file'
-        link.style.display = 'none'
-        
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        
-        window.URL.revokeObjectURL(blobUrl)
-        
-        console.log('✅ File unduhan dimulai:', fileName)
-      })
-      .catch(err => {
-        console.error('❌ Error saat mengunduh file:', err)
-        error.value = `Gagal mengunduh file: ${err instanceof Error ? err.message : 'Unknown error'}`
-      })
+    // Reassembles split files automatically when the URL points to a chunked manifest
+    const resolved = await resolveChunkedFile(fileUrl, (progress) => {
+      downloadProgress.value = progress
+    })
+    if (!resolved) {
+      throw new Error('Could not fetch the file')
+    }
+
+    const blobUrl = window.URL.createObjectURL(resolved.blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = resolved.fileName || fileName || 'file'
+    link.style.display = 'none'
+    
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    window.URL.revokeObjectURL(blobUrl)
+    
+    console.log('✅ File unduhan dimulai:', fileName)
   } catch (err) {
     console.error('❌ Error saat mengunduh file:', err)
     error.value = `Gagal mengunduh file: ${err instanceof Error ? err.message : 'Unknown error'}`
+  } finally {
+    downloadingFile.value = null
+    downloadProgress.value = 0
   }
 }
 
-function downloadAttachment(attachment: any) {
-  if (!attachment.url) {
-    console.warn('⚠️ Attachment URL tidak tersedia')
+async function downloadAttachment(attachment: any) {
+  if (!attachment.url || downloadingFile.value === attachment.url) {
     return
   }
   
+  downloadingFile.value = attachment.url
+  downloadProgress.value = 0
   try {
     console.log('📥 Mengunduh attachment:', { name: attachment.name, url: attachment.url })
     
-    fetch(attachment.url)
-      .then(response => {
-        if (!response.ok) throw new Error('Download failed')
-        return response.blob()
-      })
-      .then(blob => {
-        const blobUrl = window.URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = blobUrl
-        link.download = attachment.name || 'file'
-        link.style.display = 'none'
-        
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        
-        window.URL.revokeObjectURL(blobUrl)
-        
-        console.log('✅ Attachment download dimulai:', attachment.name)
-        copyToastMessage.value = `✅ Downloading ${attachment.name}`
-        showCopyToast.value = true
-      })
-      .catch(err => {
-        console.error('❌ Error saat mengunduh attachment:', err)
-        error.value = `Gagal mengunduh file: ${err instanceof Error ? err.message : 'Unknown error'}`
-      })
+    // Reassembles split files automatically when the URL points to a chunked manifest
+    const resolved = await resolveChunkedFile(attachment.url, (progress) => {
+      downloadProgress.value = progress
+    })
+    if (!resolved) {
+      throw new Error('Could not fetch the file')
+    }
+
+    const blobUrl = window.URL.createObjectURL(resolved.blob)
+    const link = document.createElement('a')
+    link.href = blobUrl
+    link.download = resolved.fileName || attachment.name || 'file'
+    link.style.display = 'none'
+    
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    window.URL.revokeObjectURL(blobUrl)
+    
+    console.log('✅ Attachment download dimulai:', attachment.name)
+    copyToastMessage.value = `✅ Downloading ${attachment.name}`
+    showCopyToast.value = true
   } catch (err) {
     console.error('❌ Error saat mengunduh attachment:', err)
     error.value = `Gagal mengunduh file: ${err instanceof Error ? err.message : 'Unknown error'}`
+  } finally {
+    downloadingFile.value = null
+    downloadProgress.value = 0
   }
 }
 
@@ -1391,20 +1441,25 @@ function handleMessageCopy(message: Message) {
 }
 
 async function handleFileDownload(message: Message) {
-  if (!message.fileUrl || !message.fileName) {
+  if (!message.fileUrl || !message.fileName || downloadingFile.value === message.fileUrl) {
     error.value = 'File information not available'
     return
   }
 
+  downloadingFile.value = message.fileUrl
+  downloadProgress.value = 0
   try {
-    const response = await fetch(message.fileUrl)
-    if (!response.ok) throw new Error('Failed to download file')
-    
-    const blob = await response.blob()
+    // Reassembles split files automatically when the URL points to a chunked manifest
+    const resolved = await resolveChunkedFile(message.fileUrl, (progress) => {
+      downloadProgress.value = progress
+    })
+    if (!resolved) throw new Error('Failed to download file')
+
+    const blob = resolved.blob
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = message.fileName || 'download'
+    link.download = resolved.fileName || message.fileName || 'download'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -1414,6 +1469,9 @@ async function handleFileDownload(message: Message) {
     showCopyToast.value = true
   } catch (err) {
     error.value = `Failed to download file: ${err instanceof Error ? err.message : 'Unknown error'}`
+  } finally {
+    downloadingFile.value = null
+    downloadProgress.value = 0
   }
 }
 
@@ -4562,6 +4620,8 @@ onUnmounted(() => {
 }
 
 .file-card {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
   border: 1px solid rgba(99, 102, 241, 0.3);
   cursor: pointer;
@@ -4581,6 +4641,37 @@ onUnmounted(() => {
 
 .file-card:hover .file-download-icon {
   transform: none;
+}
+
+/* Download progress overlay (shown while a file is being downloaded/reassembled) */
+.download-progress-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  border-radius: inherit;
+  z-index: 2;
+  backdrop-filter: blur(2px);
+}
+
+.download-progress-content {
+  width: 100%;
+  max-width: 240px;
+}
+
+.download-progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .file-name {
