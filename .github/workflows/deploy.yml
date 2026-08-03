@@ -1,0 +1,56 @@
+name: Deploy to VPS
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: 'dev'
+
+jobs:
+  deploy:
+    name: Deploy via Docker (SSH)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Deploy only when the PR is merged, or when triggered manually
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+
+            APP_DIR="${VPS_DEPLOY_PATH:-$HOME/chit-chat}"
+            BRANCH="${{ inputs.branch || 'dev' }}"
+
+            echo "=== Deploying $BRANCH to $APP_DIR ==="
+
+            cd "$APP_DIR"
+
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH"
+
+            echo "=== Building Docker image ==="
+            docker compose build --pull
+
+            echo "=== Restarting container ==="
+            docker compose up -d
+
+            echo "=== Pruning dangling images ==="
+            docker image prune -f
+
+            echo "=== Done ==="

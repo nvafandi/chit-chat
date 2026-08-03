@@ -197,7 +197,12 @@ export async function sendMessage(
     size: number
     originalSize?: number
     compressedSize?: number
-  }>
+  }>,
+  location?: {
+    latitude: number
+    longitude: number
+    label?: string
+  }
 ): Promise<Message> {
   const newMessage: Message = {
     id: uuidv4(),
@@ -217,7 +222,8 @@ export async function sendMessage(
     ...(fileName && { fileName }),
     ...(fileType && { fileType }),
     ...(stickerData && { stickerData }),
-    ...(attachments && attachments.length > 0 && { attachments })
+    ...(attachments && attachments.length > 0 && { attachments }),
+    ...(location && { location })
   }
 
   try {

@@ -288,6 +288,11 @@
                         :content="message.content"
                         :sticker-data="message.stickerData"
                       />
+                      <!-- Shared Location Display -->
+                      <LocationMessage
+                        v-else-if="message.location"
+                        :location="message.location"
+                      />
                       <!-- SQL Query Display -->
                       <QueryMessage
                         v-else-if="detectContentType(message.content).type === 'sql'"
@@ -521,6 +526,23 @@
                   </v-btn>
                 </template>
               </v-tooltip>
+              <v-tooltip text="Share Location">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    icon
+                    size="large"
+                    variant="tonal"
+                    color="primary"
+                    class="location-btn"
+                    @click="handleShareLocation"
+                    :disabled="isLoading || isCompressing || isSharingLocation"
+                    :loading="isSharingLocation"
+                    v-bind="props"
+                  >
+                    <v-icon>mdi-map-marker</v-icon>
+                  </v-btn>
+                </template>
+              </v-tooltip>
               <div 
                 class="message-input-wrapper"
                 :class="{ 'drag-over': isDragover }"
@@ -730,6 +752,7 @@ import MentionDropdown from '@/components/MentionDropdown.vue'
 import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
+import LocationMessage from '@/components/LocationMessage.vue'
 import type { Message, ReplyTo, User } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
@@ -839,6 +862,14 @@ const pendingStickerData = ref<{
   type: 'emoji' | 'image'
   content: string
   name: string
+} | null>(null)
+
+const isSharingLocation = ref(false)
+
+const pendingLocation = ref<{
+  latitude: number
+  longitude: number
+  label?: string
 } | null>(null)
 
 const displayMessages = computed(() => {
@@ -1581,6 +1612,62 @@ function handleSelectSticker(sticker: Sticker) {
   })
 }
 
+const GEOCODE_ERROR_MESSAGES: Record<number, string> = {
+  1: 'Akses lokasi ditolak. Izinkan akses lokasi di browser untuk berbagi lokasi.',
+  2: 'Tidak dapat menentukan lokasi saat ini. Coba lagi.',
+  3: 'Waktu permintaan lokasi habis. Coba lagi.'
+}
+
+async function handleShareLocation() {
+  if (!authStore.user) return
+
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    error.value = 'Geolocation tidak didukung oleh browser ini.'
+    return
+  }
+
+  isSharingLocation.value = true
+  error.value = null
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      })
+    })
+
+    const latitude = position.coords.latitude
+    const longitude = position.coords.longitude
+
+    let label = ''
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=16`,
+        { headers: { 'Accept-Language': 'id' } }
+      )
+      if (res.ok) {
+        const data = await res.json()
+        label = data?.display_name ?? ''
+      }
+    } catch (err) {
+      console.warn('[Chat] Reverse geocoding failed, using default label:', err)
+    }
+
+    pendingLocation.value = { latitude, longitude, label: label || undefined }
+    messageInput.value = label ? `📍 ${label}` : '📍 Lokasi Saya'
+
+    await handleSendMessage()
+  } catch (err) {
+    const geolocErr = err as GeolocationPositionError
+    console.error('[Chat] Error getting location:', err)
+    error.value = GEOCODE_ERROR_MESSAGES[geolocErr?.code] ?? 'Gagal mendapatkan lokasi. Coba lagi.'
+  } finally {
+    isSharingLocation.value = false
+  }
+}
+
 async function handleSendMessage() {
   if ((!messageInput.value.trim() && selectedFiles.value.length === 0) || !authStore.user) {
     return
@@ -1690,16 +1777,19 @@ async function handleSendMessage() {
       undefined,
       undefined,
       pendingStickerData.value || undefined,
-      attachments.length > 0 ? attachments : undefined
+      attachments.length > 0 ? attachments : undefined,
+      pendingLocation.value || undefined
     )
     
     lastSentMessageId = sentMessage.id
     console.log('[Chat] Message sent:', lastSentMessageId, {
       hasStickerData: !!sentMessage.stickerData,
-      attachmentsCount: attachments.length
+      attachmentsCount: attachments.length,
+      hasLocation: !!sentMessage.location
     })
     
     pendingStickerData.value = null
+    pendingLocation.value = null
 
     messageInput.value = ''
     replyingTo.value = null
@@ -3760,7 +3850,8 @@ onUnmounted(() => {
 }
 
 /* Sticker Button Styling */
-:deep(.sticker-btn) {
+:deep(.sticker-btn),
+:deep(.location-btn) {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
   min-width: 44px !important;
@@ -3774,19 +3865,22 @@ onUnmounted(() => {
   justify-content: center !important;
 }
 
-:deep(.sticker-btn:hover:not(:disabled)) {
+:deep(.sticker-btn:hover:not(:disabled)),
+:deep(.location-btn:hover:not(:disabled)) {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
   transform: scale(1.08) !important;
 }
 
-:deep(.sticker-btn:active:not(:disabled)) {
+:deep(.sticker-btn:active:not(:disabled)),
+:deep(.location-btn:active:not(:disabled)) {
   transform: scale(0.95) !important;
 }
 
 @media (max-width: 768px) {
   :deep(.upload-btn),
-  :deep(.sticker-btn) {
+  :deep(.sticker-btn),
+  :deep(.location-btn) {
     min-width: 40px !important;
     min-height: 40px !important;
     width: 40px !important;
@@ -3796,7 +3890,8 @@ onUnmounted(() => {
 
 @media (max-width: 600px) {
   :deep(.upload-btn),
-  :deep(.sticker-btn) {
+  :deep(.sticker-btn),
+  :deep(.location-btn) {
     min-width: 36px !important;
     min-height: 36px !important;
     width: 36px !important;
@@ -3804,7 +3899,8 @@ onUnmounted(() => {
   }
 
   :deep(.upload-btn .v-icon),
-  :deep(.sticker-btn .v-icon) {
+  :deep(.sticker-btn .v-icon),
+  :deep(.location-btn .v-icon) {
     font-size: 1.2rem !important;
   }
 }

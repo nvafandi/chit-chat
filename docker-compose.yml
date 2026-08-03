@@ -1,0 +1,10 @@
+services:
+  chit-chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chit-chat:latest
+    container_name: chit-chat
+    restart: unless-stopped
+    ports:
+      - "5173:5173"

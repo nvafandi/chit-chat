@@ -1,0 +1,62 @@
+name: CI - PR to dev
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened]
+
+jobs:
+  run-dev:
+    name: Run npm run dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start dev server (npm run dev)
+        run: |
+          npm run dev > /tmp/vite-dev.log 2>&1 &
+          echo "$!" > /tmp/vite.pid
+          echo "Waiting for dev server on port 5173..."
+          for i in $(seq 1 45); do
+            if curl -sf -o /dev/null http://localhost:5173/chit-chat/; then
+              echo "Dev server is UP after ~$((i * 2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Dev server did not start within 90s"
+          echo "--- vite log ---"
+          cat /tmp/vite-dev.log
+          exit 1
+
+      - name: Verify dev server responds
+        run: |
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/chit-chat/)
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Dev server returned $HTTP_CODE instead of 200"
+            cat /tmp/vite-dev.log
+            exit 1
+          fi
+
+      - name: Show dev server log
+        run: cat /tmp/vite-dev.log
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -f /tmp/vite.pid ]; then
+            kill "$(cat /tmp/vite.pid)" 2>/dev/null || true
+          fi
