@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "chitchut",
     "public": "dist",
     "ignore": [
       "firebase.json",
