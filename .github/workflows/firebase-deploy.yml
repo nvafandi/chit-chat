@@ -53,7 +53,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to Preview Channel
-        run: npx --yes firebase-tools hosting:channel:deploy --only hosting --project chitchut-2b9e2-5000a --expires 7d
+        run: npx --yes firebase-tools hosting:channel:deploy pr-${{ github.event.pull_request.number }} --only hosting --project chitchut-2b9e2-5000a --expires 7d
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
