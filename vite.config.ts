@@ -4,8 +4,7 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // TAMBAHKAN BARIS INI (Wajib untuk subpath deployment)
-  base: '/chit-chat/',
+  base: '/',
 
   plugins: [vue()],
   resolve: {
