@@ -53,9 +53,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to Preview Channel
-        uses: w9jds/firebase-action@v13
-        with:
-          args: hosting:channel:deploy --only hosting --project chitchut-2b9e2-5000a --expires 7d
+        run: npx --yes firebase-tools hosting:channel:deploy pr-${{ github.event.pull_request.number }} --project chitchut-2b9e2-5000a --expires 7d
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -81,8 +79,6 @@ jobs:
         run: npm run build
 
       - name: Deploy to Firebase Hosting
-        uses: w9jds/firebase-action@v13
-        with:
-          args: deploy --only hosting --project chitchut-2b9e2-5000a
+        run: npx --yes firebase-tools deploy --project chitchut-2b9e2-5000a
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

@@ -1,88 +1,62 @@
-name: Deploy to Firebase Hosting
+name: Deploy to VPS
 
 on:
   pull_request:
-    branches: [master]
-    types: [opened, synchronize, reopened]
-  push:
-    branches: [master]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches:
+      - dev
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        default: 'dev'
 
 jobs:
-  build:
-    name: Build
+  deploy:
+    name: Deploy via Docker (SSH)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Deploy only when the PR is merged, or when triggered manually
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Prepare SSH key
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s' "${{ secrets.VPS_SSH_KEY }}" | base64 -d > "$HOME/.ssh/chit-chat-deploy"
+          chmod 600 "$HOME/.ssh/chit-chat-deploy"
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1
         with:
-          node-version: 20
-          cache: npm
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key_path: $HOME/.ssh/chit-chat-deploy
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
 
-      - name: Install dependencies
-        run: npm ci
+            APP_DIR="${VPS_DEPLOY_PATH:-$HOME/chit-chat}"
+            BRANCH="${{ inputs.branch || 'dev' }}"
 
-      - name: Build
-        run: npm run build
+            echo "=== Deploying $BRANCH to $APP_DIR ==="
 
-  deploy-preview:
-    name: Deploy Preview (PR)
-    if: github.event_name == 'pull_request'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            cd "$APP_DIR"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH"
 
-      - name: Install dependencies
-        run: npm ci
+            echo "=== Building Docker image ==="
+            docker compose build --pull
 
-      - name: Build
-        run: npm run build
+            echo "=== Restarting container ==="
+            docker compose up -d
 
-      - name: Deploy to Preview Channel
-        uses: w9jds/firebase-action@v13
-        with:
-          args: hosting:channel:deploy --only hosting --project chitchut-2b9e2-5000a --expires 7d
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+            echo "=== Pruning dangling images ==="
+            docker image prune -f
 
-  deploy-production:
-    name: Deploy Production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Deploy to Firebase Hosting
-        uses: w9jds/firebase-action@v13
-        with:
-          args: deploy --only hosting --project chitchut-2b9e2-5000a
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+            echo "=== Done ==="

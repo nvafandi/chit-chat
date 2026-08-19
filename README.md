@@ -22,6 +22,11 @@ A modern real-time chat application built with Vue 3, TypeScript, Pinia, Vuetify
 - **Language:** TypeScript
 - **Icons:** Material Design Icons (MDI)
 
+## CI/CD
+
+- **Firebase Hosting:** PR ke `master` otomatis deploy ke preview channel; push ke `master` deploy ke produksi (`.github/workflows/firebase-deploy.yml`).
+- **VPS:** PR ke `dev` yang di-merge otomatis deploy via Docker/SSH (`.github/workflows/deploy.yml`).
+
 ## Project Structure
 
 ```
