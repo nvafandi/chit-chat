@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "chitchut-2b9e2-5000a"
+  },
+  "targets": {
+    "chitchut-2b9e2-5000a": {
+      "hosting": {
+        "chitchut": [
+          "chitchut-2b9e2-5000a"
+        ]
+      }
+    }
   }
 }
