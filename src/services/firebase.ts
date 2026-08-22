@@ -538,3 +538,38 @@ export async function cleanExpiredMessages(): Promise<number> {
     throw error
   }
 }
+
+/**
+ * Check if a file URL is used by any pinned message
+ * @param fileUrl - The file URL to check
+ * @returns true if file is used by a pinned message
+ */
+export async function isFileUsedByPinnedMessage(fileUrl: string): Promise<boolean> {
+  try {
+    // Query pinned messages that reference this file URL
+    const q = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where('pinned', '==', true)
+    )
+    
+    const querySnapshot = await getDocs(q)
+    
+    for (const doc of querySnapshot.docs) {
+      const data = doc.data() as Message
+      
+      // Check if this pinned message uses the file
+      if (
+        data.imageUrl === fileUrl ||
+        data.fileUrl === fileUrl ||
+        data.attachments?.some(att => att.url === fileUrl)
+      ) {
+        return true
+      }
+    }
+    
+    return false
+  } catch (error) {
+    console.error('Error checking pinned message file:', error)
+    return false
+  }
+}

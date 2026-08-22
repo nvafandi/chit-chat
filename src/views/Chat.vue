@@ -142,7 +142,7 @@
                     </div>
                     <div class="message-sender-name">
                       {{ message.username }}
-                      <v-icon v-if="message.pinned" size="x-small" color="amber" class="ml-1" title="Pinned message">mdi-pin</v-icon>
+                      <v-icon v-if="message.pinned" size="x-small" color="red" class="ml-1" title="Pinned message">mdi-pin</v-icon>
                     </div>
                   </div>
 
@@ -350,11 +350,11 @@
                         size="x-small"
                         variant="text"
                         class="action-btn"
-                        :class="{ 'pinned-btn': message.pinned }"
+                        :class="{ 'pinned-btn-active': message.pinned }"
                         @click="togglePinMessage(message)"
                         :title="message.pinned ? 'Unpin message' : 'Pin message'"
                       >
-                        <v-icon size="small">{{ message.pinned ? 'mdi-pin-off' : 'mdi-pin' }}</v-icon>
+                        <v-icon size="small" :color="message.pinned ? 'red' : undefined">{{ message.pinned ? 'mdi-pin-off' : 'mdi-pin' }}</v-icon>
                       </v-btn>
                       <v-btn
                         v-if="message.fileUrl"
@@ -4173,12 +4173,12 @@ onUnmounted(() => {
   background-color: rgba(255, 255, 255, 0.25) !important;
 }
 
-.pinned-btn {
-  color: #FFC107 !important;
+.pinned-btn-active {
+  color: #F44336 !important;
 }
 
-.message-sent .pinned-btn {
-  color: #FFD54F !important;
+.message-sent .pinned-btn-active {
+  color: #EF5350 !important;
 }
 
 /* Tablet Responsive (600px - 960px) */

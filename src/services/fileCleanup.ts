@@ -5,7 +5,7 @@
 
 import { supabase } from './supabase'
 import { isFileExpired, cleanupExpiredFileMetadata, getFileMetadata } from '@/utils/fileExpiration'
-import { hideMessage, cleanExpiredMessages } from './firebase'
+import { hideMessage, cleanExpiredMessages, isFileUsedByPinnedMessage } from './firebase'
 import { SUPABASE_BUCKET_NAME, ENABLE_AGGRESSIVE_FILE_DELETION, FILE_EXPIRATION_TIME, IMAGE_EXPIRATION_TIME } from '@/utils/const'
 import type { Message } from '@/types'
 
@@ -203,6 +203,13 @@ export async function deleteExpiredFilesFromStorage(bucket: string = SUPABASE_BU
 
       if (fileAgeMs > expirationTimeMs) {
         console.log(`⏰ ${typeLabel} EXPIRED: ${file.name} (age: ${fileAgeSeconds}s > ${expirationSeconds}s)`)
+
+        // Check if file is used by a pinned message
+        const isPinned = await isFileUsedByPinnedMessage(fileUrl)
+        if (isPinned) {
+          console.log(`📌 ${typeLabel} SKIPPED (used by pinned message): ${file.name}`)
+          continue
+        }
 
         try {
           const filePath = `public/${file.name}`
