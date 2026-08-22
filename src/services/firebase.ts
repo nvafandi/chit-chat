@@ -14,7 +14,7 @@ import {
   startAfter,
   DocumentSnapshot,
 } from 'firebase/firestore'
-import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE } from '@/utils/const'
+import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE, MESSAGE_EXPIRATION_TIME } from '@/utils/const'
 import type { User, Message, ReplyTo } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { getRandomAnimal } from '@/utils/animals'
@@ -258,6 +258,61 @@ export async function hideMessage(messageId: string): Promise<void> {
   }
 }
 
+/**
+ * Pin a message
+ * @param messageId - The message ID to pin
+ * @param pinnedBy - Username of the person pinning
+ */
+export async function pinMessage(messageId: string, pinnedBy: string): Promise<void> {
+  try {
+    const q = query(collection(db, COLLECTIONS.MESSAGES), where('id', '==', messageId))
+    const querySnapshot = await getDocs(q)
+
+    if (querySnapshot.empty) {
+      throw new Error(`Message with id "${messageId}" not found`)
+    }
+
+    const docRef = querySnapshot.docs[0].ref
+    await updateDoc(docRef, {
+      pinned: true,
+      pinnedAt: Date.now(),
+      pinnedBy: pinnedBy,
+    })
+
+    console.log('Message pinned:', messageId)
+  } catch (error) {
+    console.error('Error pinning message:', error)
+    throw error
+  }
+}
+
+/**
+ * Unpin a message
+ * @param messageId - The message ID to unpin
+ */
+export async function unpinMessage(messageId: string): Promise<void> {
+  try {
+    const q = query(collection(db, COLLECTIONS.MESSAGES), where('id', '==', messageId))
+    const querySnapshot = await getDocs(q)
+
+    if (querySnapshot.empty) {
+      throw new Error(`Message with id "${messageId}" not found`)
+    }
+
+    const docRef = querySnapshot.docs[0].ref
+    await updateDoc(docRef, {
+      pinned: false,
+      pinnedAt: null,
+      pinnedBy: null,
+    })
+
+    console.log('Message unpinned:', messageId)
+  } catch (error) {
+    console.error('Error unpinning message:', error)
+    throw error
+  }
+}
+
 export async function getMessages(): Promise<Message[]> {
   try {
     const q = query(
@@ -417,6 +472,69 @@ export async function cleanUsers(): Promise<void> {
     console.log(`✅ Deleted ${count} users`)
   } catch (error) {
     console.error('❌ Error deleting users:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete messages older than MESSAGE_EXPIRATION_TIME (1 week)
+ * Excludes pinned messages
+ * @returns Number of deleted messages
+ */
+export async function cleanExpiredMessages(): Promise<number> {
+  try {
+    console.log('🗑️  Cleaning expired messages (>1 week)...')
+    
+    const expirationTime = Date.now() - MESSAGE_EXPIRATION_TIME
+    let deletedCount = 0
+    let pinnedSkipped = 0
+
+    // Query messages older than expiration time
+    const q = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where('timestamp', '<', expirationTime)
+    )
+    
+    const querySnapshot = await getDocs(q)
+    
+    if (querySnapshot.empty) {
+      console.log('📭 No expired messages found')
+      return 0
+    }
+
+    console.log(`Found ${querySnapshot.size} expired messages`)
+
+    // Delete in batches, skip pinned messages
+    const batchSize = 20
+    const docs = querySnapshot.docs
+    
+    for (let i = 0; i < docs.length; i += batchSize) {
+      const batch = docs.slice(i, i + batchSize)
+      
+      for (const doc of batch) {
+        const data = doc.data()
+        
+        // Skip pinned messages
+        if (data.pinned === true) {
+          pinnedSkipped++
+          continue
+        }
+        
+        await deleteDoc(doc.ref)
+        deletedCount++
+      }
+      
+      console.log(`  Processed ${Math.min(i + batchSize, docs.length)}/${docs.length} messages...`)
+    }
+
+    if (pinnedSkipped > 0) {
+      console.log(`📌 Skipped ${pinnedSkipped} pinned messages`)
+    }
+    
+    console.log(`✅ Deleted ${deletedCount} expired messages`)
+    return deletedCount
+  } catch (error) {
+    console.error('❌ Error cleaning expired messages:', error)
     throw error
   }
 }

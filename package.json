@@ -10,7 +10,10 @@
     "clean": "node src/scripts/cleanDatabase.js",
     "clean:all": "node src/scripts/cleanDatabase.js all",
     "clean:users": "node src/scripts/cleanDatabase.js users",
-    "clean:messages": "node src/scripts/cleanDatabase.js messages"
+    "clean:messages": "node src/scripts/cleanDatabase.js messages",
+    "clean:expired": "node src/scripts/cleanExpiredMessages.js",
+    "clean:storage": "node src/scripts/cleanExpiredStorage.js",
+    "check:storage": "node src/scripts/checkSupabaseStorage.js"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
