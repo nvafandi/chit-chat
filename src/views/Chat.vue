@@ -1554,6 +1554,12 @@ async function togglePinMessage(message: any) {
   if (!authStore.user) return
   
   try {
+    const newPinnedState = !message.pinned
+    const newPinnedBy = newPinnedState ? authStore.user.username : undefined
+    
+    // Update local state immediately for instant UI feedback
+    chatStore.updateMessagePin(message.id, newPinnedState, newPinnedBy)
+    
     if (message.pinned) {
       await unpinMessage(message.id)
       console.log('[Chat] Message unpinned:', message.id)
