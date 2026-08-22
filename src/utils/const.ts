@@ -31,6 +31,9 @@ export const IMAGE_EXPIRATION_TIME = 24 * 60 * 60 * 1000 // 1 day
 /** Non-image file expiration time in milliseconds (1 day = 24 hours) */
 export const FILE_EXPIRATION_TIME = 24 * 60 * 60 * 1000 // 1 day
 
+/** Message expiration time in milliseconds (1 week) */
+export const MESSAGE_EXPIRATION_TIME = 7 * 24 * 60 * 60 * 1000 // 1 week
+
 /** Periodic cleanup interval in milliseconds (30 minutes) */
 export const PERIODIC_CLEANUP_INTERVAL = 30 * 60 * 1000 // 30 minutes
 

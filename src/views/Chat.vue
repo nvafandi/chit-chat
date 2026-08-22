@@ -142,6 +142,7 @@
                     </div>
                     <div class="message-sender-name">
                       {{ message.username }}
+                      <v-icon v-if="message.pinned" size="x-small" color="amber" class="ml-1" title="Pinned message">mdi-pin</v-icon>
                     </div>
                   </div>
 
@@ -343,6 +344,17 @@
                         title="Copy message"
                       >
                         <v-icon size="small">mdi-content-copy</v-icon>
+                      </v-btn>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        class="action-btn"
+                        :class="{ 'pinned-btn': message.pinned }"
+                        @click="togglePinMessage(message)"
+                        :title="message.pinned ? 'Unpin message' : 'Pin message'"
+                      >
+                        <v-icon size="small">{{ message.pinned ? 'mdi-pin-off' : 'mdi-pin' }}</v-icon>
                       </v-btn>
                       <v-btn
                         v-if="message.fileUrl"
@@ -715,7 +727,7 @@ import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
-import { sendMessage, getMessages, subscribeToMessages, subscribeToUsers, subscribeToMessageCount, getUserById, hideMessage, getMessagesBefore } from '@/services/firebase'
+import { sendMessage, getMessages, subscribeToMessages, subscribeToUsers, subscribeToMessageCount, getUserById, hideMessage, getMessagesBefore, pinMessage, unpinMessage } from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
 import { validateSession } from '@/services/session'
@@ -1536,6 +1548,22 @@ async function performDeleteMessage() {
   messageToDelete.value = null
   
   await handleHideMessage(messageId)
+}
+
+async function togglePinMessage(message: any) {
+  if (!authStore.user) return
+  
+  try {
+    if (message.pinned) {
+      await unpinMessage(message.id)
+      console.log('[Chat] Message unpinned:', message.id)
+    } else {
+      await pinMessage(message.id, authStore.user.username)
+      console.log('[Chat] Message pinned:', message.id)
+    }
+  } catch (error) {
+    console.error('[Chat] Error toggling pin:', error)
+  }
 }
 
 function handleMessageKeydown(event: KeyboardEvent) {
@@ -4143,6 +4171,14 @@ onUnmounted(() => {
 .message-sent .action-btn:hover {
   color: white !important;
   background-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.pinned-btn {
+  color: #FFC107 !important;
+}
+
+.message-sent .pinned-btn {
+  color: #FFD54F !important;
 }
 
 /* Tablet Responsive (600px - 960px) */

@@ -33,6 +33,9 @@ export interface Message {
   timestamp: number
   replyTo?: ReplyTo
   hidden?: boolean
+  pinned?: boolean      // Pin status
+  pinnedAt?: number     // Timestamp when pinned
+  pinnedBy?: string     // Username who pinned
   // Support for both old single-file format and new attachments array
   imageUrl?: string      // URL of uploaded image (legacy)
   imageSize?: number     // Size of compressed image in bytes (legacy)

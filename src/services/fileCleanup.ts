@@ -5,7 +5,7 @@
 
 import { supabase } from './supabase'
 import { isFileExpired, cleanupExpiredFileMetadata, getFileMetadata } from '@/utils/fileExpiration'
-import { hideMessage } from './firebase'
+import { hideMessage, cleanExpiredMessages } from './firebase'
 import { SUPABASE_BUCKET_NAME, ENABLE_AGGRESSIVE_FILE_DELETION, FILE_EXPIRATION_TIME, IMAGE_EXPIRATION_TIME } from '@/utils/const'
 import type { Message } from '@/types'
 
@@ -102,11 +102,11 @@ export async function syncMessagesWithFileAvailability(messages: Message[]): Pro
 // export async function performFileCleanup(messages: Message[]): Promise<{
 export async function performFileCleanup(messages: Message[]): Promise<{
   metadataCleanedUp: boolean
-  // messagesHidden: number
   filesDeleted: number
+  messagesDeleted: number
 }> {
   try {
-    console.log('🧹 Starting complete file cleanup routine...')
+    console.log('🧹 Starting complete cleanup routine...')
 
     // Clean up expired metadata
     cleanupExpiredFileMetadata()
@@ -121,19 +121,27 @@ export async function performFileCleanup(messages: Message[]): Promise<{
       filesDeleted = await deleteExpiredFilesFromStorage()
     }
 
-    console.log('✅ File cleanup routine completed', { filesDeleted, messagesHidden })
+    // Delete messages older than 1 week
+    let messagesDeleted = 0
+    try {
+      messagesDeleted = await cleanExpiredMessages()
+    } catch (error) {
+      console.error('⚠️ Error cleaning expired messages:', error)
+    }
 
+    console.log('✅ Cleanup routine completed', { filesDeleted, messagesHidden, messagesDeleted })
+    
     return {
       metadataCleanedUp: true,
-      // messagesHidden,
       filesDeleted,
+      messagesDeleted,
     }
   } catch (error) {
-    console.error('❌ Error during file cleanup:', error)
+    console.error('❌ Error during cleanup:', error)
     return {
       metadataCleanedUp: false,
-      // messagesHidden: 0,
       filesDeleted: 0,
+      messagesDeleted: 0,
     }
   }
 }
