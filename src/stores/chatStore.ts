@@ -51,6 +51,15 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function updateMessagePin(messageId: string, pinned: boolean, pinnedBy?: string) {
+    const message = messages.value.find(m => m.id === messageId)
+    if (message) {
+      message.pinned = pinned
+      message.pinnedAt = pinned ? Date.now() : undefined
+      message.pinnedBy = pinned ? pinnedBy : undefined
+    }
+  }
+
   function setUsers(newUsers: User[]) {
     users.value = newUsers
   }
@@ -123,6 +132,7 @@ export const useChatStore = defineStore('chat', () => {
     addMessage,
     prependMessages,
     updateMessageHidden,
+    updateMessagePin,
     setUsers,
     setLoading,
     setError,
