@@ -344,6 +344,13 @@
                         :content="message.content"
                         :sticker-data="message.stickerData"
                       />
+                      <!-- Live Location Display -->
+                      <LiveLocationMessage
+                        v-else-if="message.isLiveLocation && message.location"
+                        :location="message.location"
+                        :message-id="message.id"
+                        :is-own-message="message.userId === authStore.user?.id"
+                      />
                       <!-- Shared Location Display -->
                       <LocationMessage
                         v-else-if="message.location"
@@ -577,11 +584,28 @@
                     color="primary"
                     class="location-btn"
                     @click="handleShareLocation"
-                    :disabled="isLoading || isCompressing || isSharingLocation"
+                    :disabled="isLoading || isCompressing || isSharingLocation || isLiveTracking"
                     :loading="isSharingLocation"
                     v-bind="props"
                   >
                     <v-icon>mdi-map-marker</v-icon>
+                  </v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip :text="isLiveTracking ? 'Stop Live Location' : 'Live Location'">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    icon
+                    size="default"
+                    :variant="isLiveTracking ? 'flat' : 'tonal'"
+                    :color="isLiveTracking ? 'success' : 'primary'"
+                    class="location-btn live-toggle"
+                    :class="{ 'is-live': isLiveTracking }"
+                    @click="toggleLiveLocation"
+                    :disabled="isLoading || isCompressing || isSharingLocation"
+                    v-bind="props"
+                  >
+                    <v-icon>{{ isLiveTracking ? 'mdi-crosshairs-gps' : 'mdi-crosshairs' }}</v-icon>
                   </v-btn>
                 </template>
               </v-tooltip>
@@ -962,6 +986,9 @@ import {
   addGroupMembers,
   removeGroupMember,
   backfillLegacyMessageRooms,
+  startLiveLocation,
+  updateLiveLocation,
+  stopLiveLocation as fbStopLiveLocation,
 } from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
@@ -1004,6 +1031,7 @@ import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
 import LocationMessage from '@/components/LocationMessage.vue'
+import LiveLocationMessage from '@/components/LiveLocationMessage.vue'
 import type { Message, ReplyTo, User, ChatRoom, MemberInfo, RoomType } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
@@ -1125,6 +1153,15 @@ const pendingLocation = ref<{
   longitude: number
   label?: string
 } | null>(null)
+
+// ============================================================================
+// LIVE LOCATION STATE
+// ============================================================================
+const isLiveTracking = ref(false)
+const liveLocationMessageId = ref<string | null>(null)
+let watchPositionId: number | null = null
+let lastLiveLocationUpdate = 0
+const LIVE_LOCATION_THROTTLE_MS = 10_000 // 10 seconds
 
 // ============================================================================
 // CHANNELS STATE
@@ -2011,6 +2048,103 @@ async function handleShareLocation() {
   } finally {
     isSharingLocation.value = false
   }
+}
+
+// ============================================================================
+// LIVE LOCATION FUNCTIONS
+// ============================================================================
+
+function toggleLiveLocation() {
+  if (isLiveTracking.value) {
+    stopLiveTracking()
+  } else {
+    startLiveTracking()
+  }
+}
+
+async function startLiveTracking() {
+  if (!authStore.user || !chatStore.currentRoomId) return
+
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    error.value = 'Geolocation tidak didukung oleh browser ini.'
+    return
+  }
+
+  error.value = null
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 0,
+      })
+    })
+
+    const lat = position.coords.latitude
+    const lng = position.coords.longitude
+
+    const sentMessage = await sendMessage(
+      authStore.user.id,
+      authStore.user.username,
+      authStore.user.animal,
+      '📍 Live Location',
+      undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined,
+      { latitude: lat, longitude: lng },
+      chatStore.currentRoomId,
+      true,
+    )
+
+    await startLiveLocation(sentMessage.id, chatStore.currentRoomId, authStore.user.id, authStore.user.username, authStore.user.animal, lat, lng)
+
+    isLiveTracking.value = true
+    liveLocationMessageId.value = sentMessage.id
+    lastLiveLocationUpdate = Date.now()
+
+    watchPositionId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const now = Date.now()
+        if (now - lastLiveLocationUpdate < LIVE_LOCATION_THROTTLE_MS) return
+        lastLiveLocationUpdate = now
+
+        try {
+          await updateLiveLocation(sentMessage.id, pos.coords.latitude, pos.coords.longitude)
+        } catch (e) {
+          console.warn('[Chat] Failed to update live location:', e)
+        }
+      },
+      (err) => {
+        console.error('[Chat] watchPosition error:', err)
+      },
+      { enableHighAccuracy: true, maximumAge: 0 }
+    )
+  } catch (err) {
+    const geolocErr = err as GeolocationPositionError
+    console.error('[Chat] Error starting live location:', err)
+    error.value = GEOCODE_ERROR_MESSAGES[geolocErr?.code] ?? 'Gagal memulai live location.'
+    isLiveTracking.value = false
+  }
+}
+
+async function stopLiveTracking() {
+  if (watchPositionId !== null) {
+    navigator.geolocation.clearWatch(watchPositionId)
+    watchPositionId = null
+  }
+
+  if (liveLocationMessageId.value) {
+    try {
+      await fbStopLiveLocation(liveLocationMessageId.value)
+    } catch (e) {
+      console.warn('[Chat] Failed to stop live location:', e)
+    }
+  }
+
+  isLiveTracking.value = false
+  liveLocationMessageId.value = null
+  lastLiveLocationUpdate = 0
 }
 
 async function handleSendMessage() {
@@ -3091,6 +3225,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  stopLiveTracking()
   chatStore.unsubscribeFromUpdates()
 
   if (unsubscribeRooms) {
@@ -4476,6 +4611,17 @@ onUnmounted(() => {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+/* Live Location Toggle - pulsing when active */
+:deep(.live-toggle.is-live) {
+  animation: live-pulse 1.5s ease-in-out infinite !important;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(76, 175, 80, 0.3)) !important;
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(76, 175, 80, 0); }
 }
 
 :deep(.sticker-btn:hover:not(:disabled)),
@@ -6001,10 +6147,11 @@ onUnmounted(() => {
 }
 
 /* Hover actions — Discord style floating toolbar */
+/* Anchored to the bubble (message-card), not the full-width row */
 .message-row .action-buttons {
   position: absolute;
-  top: -14px;
-  right: 24px;
+  top: -13px;
+  right: 10px;
   background: #313338;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
