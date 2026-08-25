@@ -13,11 +13,12 @@ import {
   updateDoc,
   startAfter,
   arrayUnion,
+  arrayRemove,
   DocumentReference,
   DocumentSnapshot,
 } from 'firebase/firestore'
 import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE, MESSAGE_EXPIRATION_TIME, DEFAULT_ROOM_ID } from '@/utils/const'
-import type { User, Message, ReplyTo, ChatRoom, MemberInfo } from '@/types'
+import type { User, Message, ReplyTo, ChatRoom, MemberInfo, RoomType } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { getRandomAnimal } from '@/utils/animals'
 
@@ -591,10 +592,12 @@ export async function isFileUsedByPinnedMessage(fileUrl: string): Promise<boolea
 // ============================================================================
 
 /**
- * Create a new channel
+ * Create a new channel.
+ * @param type 'room' = public (anyone can join), 'group' = private (invite-only)
  */
 export async function createRoom(
   name: string,
+  type: RoomType,
   creator: MemberInfo
 ): Promise<ChatRoom> {
   const trimmedName = name.trim()
@@ -605,7 +608,7 @@ export async function createRoom(
   const newRoom: ChatRoom = {
     id: uuidv4(),
     name: trimmedName,
-    type: 'room',
+    type,
     createdBy: creator.id,
     createdByName: creator.username,
     members: [creator.id],
@@ -615,7 +618,7 @@ export async function createRoom(
 
   try {
     await addDoc(collection(db, COLLECTIONS.ROOMS), newRoom)
-    console.log('[Channels] Created channel:', newRoom.name)
+    console.log('[Channels] Created', type === 'group' ? 'private' : 'public', 'channel:', newRoom.name)
     return newRoom
   } catch (error) {
     console.error('Error creating channel:', error)
@@ -643,20 +646,47 @@ export async function getRoomById(roomId: string): Promise<ChatRoom | null> {
 }
 
 /**
- * Subscribe to all channels, sorted oldest first.
+ * Subscribe to all channels visible to a user:
+ * - every public channel
+ * - every private channel where the user is a member
+ * Merges both live queries into one deduplicated callback.
  */
-export function subscribeToRooms(callback: (rooms: ChatRoom[]) => void): () => void {
+export function subscribeToRooms(userId: string, callback: (rooms: ChatRoom[]) => void): () => void {
+  let publicRooms: ChatRoom[] = []
+  let myPrivate: ChatRoom[] = []
+  const unsubscribers: Array<() => void> = []
+
+  const emit = () => {
+    const map = new Map<string, ChatRoom>()
+    for (const room of [...publicRooms, ...myPrivate]) {
+      if (!map.has(room.id)) map.set(room.id, room)
+    }
+    const merged = [...map.values()].sort((a, b) => a.createdAt - b.createdAt)
+    callback(merged)
+  }
+
   try {
-    const q = query(collection(db, COLLECTIONS.ROOMS))
+    // Public channels
+    const publicQuery = query(collection(db, COLLECTIONS.ROOMS), where('type', '==', 'room'))
+    const unsubPublic = onSnapshot(publicQuery, (snapshot) => {
+      publicRooms = snapshot.docs.map((doc) => doc.data() as ChatRoom)
+      emit()
+    }, (error) => console.error('[Channels] Public listener error:', error))
+    unsubscribers.push(unsubPublic)
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const rooms = snapshot.docs
-        .map((doc) => doc.data() as ChatRoom)
-        .sort((a, b) => a.createdAt - b.createdAt)
-      callback(rooms)
-    }, (error) => console.error('[Channels] Listener error:', error))
+    // Private channels where user is a member
+    const privateQuery = query(
+      collection(db, COLLECTIONS.ROOMS),
+      where('type', '==', 'group'),
+      where('members', 'array-contains', userId)
+    )
+    const unsubPrivate = onSnapshot(privateQuery, (snapshot) => {
+      myPrivate = snapshot.docs.map((doc) => doc.data() as ChatRoom)
+      emit()
+    }, (error) => console.error('[Channels] Private listener error:', error))
+    unsubscribers.push(unsubPrivate)
 
-    return unsubscribe
+    return () => unsubscribers.forEach(fn => fn())
   } catch (error) {
     console.error('Error subscribing to rooms:', error)
     throw error
@@ -664,7 +694,7 @@ export function subscribeToRooms(callback: (rooms: ChatRoom[]) => void): () => v
 }
 
 /**
- * Track membership when opening a channel.
+ * Track membership when opening a public channel.
  */
 export async function joinRoom(roomId: string, user: MemberInfo): Promise<void> {
   try {
@@ -680,6 +710,75 @@ export async function joinRoom(roomId: string, user: MemberInfo): Promise<void> 
     console.log(`[Rooms] ${user.username} joined room:`, room.data.name)
   } catch (error) {
     console.error('Error joining room:', error)
+    throw error
+  }
+}
+
+/**
+ * Leave a channel (removes the user from the member list).
+ */
+export async function leaveRoom(roomId: string, userId: string): Promise<void> {
+  try {
+    const room = await getRoomDocRef(roomId)
+
+    const details = (room.data.memberDetails || []).find(m => m.id === userId)
+    const batchUpdates: Record<string, unknown> = {
+      members: arrayRemove(userId),
+    }
+    if (details) {
+      batchUpdates.memberDetails = arrayRemove(details)
+    }
+
+    await updateDoc(room.ref, batchUpdates)
+    console.log('[Channels] User left channel:', room.data.name)
+  } catch (error) {
+    console.error('Error leaving channel:', error)
+    throw error
+  }
+}
+
+/**
+ * Add members to a private channel (owner only - enforced by caller UI).
+ */
+export async function addGroupMembers(roomId: string, usersToAdd: MemberInfo[]): Promise<void> {
+  try {
+    const room = await getRoomDocRef(roomId)
+
+    const existingIds = new Set(room.data.members || [])
+    const newUsers = usersToAdd.filter(u => !existingIds.has(u.id))
+
+    if (newUsers.length === 0) return
+
+    await updateDoc(room.ref, {
+      members: arrayUnion(...newUsers.map(u => u.id)),
+      memberDetails: arrayUnion(...newUsers),
+    })
+    console.log(`[Channels] Added ${newUsers.length} member(s) to:`, room.data.name)
+  } catch (error) {
+    console.error('Error adding members:', error)
+    throw error
+  }
+}
+
+/**
+ * Remove a member from a channel (owner only - enforced by caller UI).
+ */
+export async function removeGroupMember(roomId: string, userId: string): Promise<void> {
+  try {
+    const room = await getRoomDocRef(roomId)
+
+    const details = (room.data.memberDetails || []).find(m => m.id === userId)
+    const batchUpdates: Record<string, unknown> = {
+      members: arrayRemove(userId),
+    }
+    if (details) {
+      batchUpdates.memberDetails = arrayRemove(details)
+    }
+
+    await updateDoc(room.ref, batchUpdates)
+    console.log('[Channels] Removed member from:', room.data.name)
+  } catch (error) {
+    console.error('Error removing member:', error)
     throw error
   }
 }

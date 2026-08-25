@@ -14,10 +14,14 @@ export interface MemberInfo {
 
 export type RoomType = 'room' | 'group'
 
+/**
+ * 'room'  = public channel (anyone can join)
+ * 'group' = private channel (invite-only, managed by owner)
+ */
 export interface ChatRoom {
   id: string
   name: string
-  type: RoomType          // 'room' = public room, 'group' = private group
+  type: RoomType          // 'room' = public channel, 'group' = private (invite-only) channel
   createdBy: string       // userId of creator
   createdByName: string   // username of creator (denormalized)
   members: string[]       // member userIds (used for membership queries)

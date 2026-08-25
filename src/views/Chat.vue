@@ -29,11 +29,17 @@
         >
           <span class="channel-hash">#</span>
           <span class="channel-name">{{ room.name }}</span>
+          <v-icon
+            v-if="room.type === 'group'"
+            size="12"
+            color="#949ba4"
+            title="Private channel"
+          >mdi-lock-outline</v-icon>
           <span
             v-if="room.id !== DEFAULT_ROOM_ID"
             class="channel-gear"
             @click.stop="openMembersDialog(room)"
-            title="Channel info"
+            :title="room.type === 'group' ? 'Manage members' : 'Channel info'"
           >
             <v-icon size="14">mdi-cog-outline</v-icon>
           </span>
@@ -550,7 +556,7 @@
                 <template v-slot:activator="{ props }">
                   <v-btn
                     icon
-                    size="large"
+                    size="default"
                     variant="tonal"
                     color="primary"
                     class="upload-btn"
@@ -562,27 +568,11 @@
                   </v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip text="Send Sticker">
-                <template v-slot:activator="{ props }">
-                  <v-btn
-                    icon
-                    size="large"
-                    variant="tonal"
-                    color="primary"
-                    class="sticker-btn"
-                    @click="showStickerPicker = true"
-                    :disabled="isLoading || isCompressing"
-                    v-bind="props"
-                  >
-                    <v-icon>mdi-emoticon-happy</v-icon>
-                  </v-btn>
-                </template>
-              </v-tooltip>
               <v-tooltip text="Share Location">
                 <template v-slot:activator="{ props }">
                   <v-btn
                     icon
-                    size="large"
+                    size="default"
                     variant="tonal"
                     color="primary"
                     class="location-btn"
@@ -619,6 +609,15 @@
                   @input="updateCursorPosition"
                   @paste="handlePasteFile"
                 />
+                <button
+                  class="emoji-inline-btn"
+                  type="button"
+                  @click.prevent="showStickerPicker = true"
+                  :disabled="isLoading || isCompressing"
+                  title="Send Sticker"
+                >
+                  <v-icon size="20">mdi-emoticon-happy-outline</v-icon>
+                </button>
               </div>
             </div>
             <v-btn
@@ -627,12 +626,12 @@
               color="primary"
               :loading="isLoading || isCompressing"
               :disabled="(!messageInput.trim() && selectedFiles.length === 0) || isLoading || isCompressing"
-              size="large"
+              size="default"
               class="send-btn"
               title="Send message (Press Enter or click button)"
               variant="elevated"
             >
-              <v-icon size="large" color="white">mdi-send-circle</v-icon>
+              <v-icon size="default" color="white">mdi-send-circle</v-icon>
             </v-btn>
           </div>
         </v-form>
@@ -687,9 +686,48 @@
             autofocus
             @keyup.enter="handleCreateRoom"
           />
-          <p class="text-caption text-grey mt-3 mb-0">
-            Channels are visible to everyone and users join them automatically when opened.
+
+          <div class="text-subtitle2 mt-4 mb-2">Visibility</div>
+          <v-btn-toggle
+            v-model="createRoomVisibility"
+            mandatory
+            color="primary"
+            density="compact"
+            class="visibility-toggle"
+          >
+            <v-btn value="public" prepend-icon="mdi-hash">
+              Public
+            </v-btn>
+            <v-btn value="private" prepend-icon="mdi-lock-outline">
+              Private
+            </v-btn>
+          </v-btn-toggle>
+          <p class="text-caption text-grey mt-2">
+            {{
+              createRoomVisibility === 'private'
+                ? 'Only invited members can see and join this channel. You can add members anytime.'
+                : 'Visible to everyone — users join automatically when they open it.'
+            }}
           </p>
+
+          <!-- Private: pick initial members -->
+          <template v-if="createRoomVisibility === 'private'">
+            <div class="text-subtitle2 mt-4 mb-1">Invite members (optional)</div>
+            <div v-if="otherUsers.length === 0" class="text-caption text-grey">
+              No other users registered yet.
+            </div>
+            <div v-else class="member-select-list">
+              <v-checkbox
+                v-for="user in otherUsers"
+                :key="user.id"
+                v-model="selectedMemberIds"
+                :value="user.id"
+                :label="`${user.animal} ${user.username}`"
+                hide-details
+                density="compact"
+              />
+            </div>
+          </template>
         </v-card-text>
         <v-card-actions class="justify-end gap-2">
           <v-btn variant="tonal" @click="showCreateRoomDialog = false" :disabled="creatingRoom">Cancel</v-btn>
@@ -706,31 +744,90 @@
       </v-card>
     </v-dialog>
 
-    <!-- Channel Info Dialog -->
+    <!-- Channel Info / Members Dialog -->
     <v-dialog
       v-model="showMembersDialog"
       max-width="420"
     >
       <v-card>
         <v-card-title class="text-h6 d-flex align-center">
-          <v-icon size="small" class="mr-2">mdi-pound</v-icon>
+          <v-icon size="small" class="mr-2">
+            {{ isSelectedRoomPrivate ? 'mdi-lock-outline' : 'mdi-pound' }}
+          </v-icon>
           {{ selectedRoom?.name || 'Channel' }}
         </v-card-title>
         <v-card-text v-if="selectedRoom">
           <p class="text-caption text-grey mb-2">
-            Created by {{ selectedRoom.createdByName }} · {{ selectedRoom.memberDetails.length }} member(s)
+            {{ isSelectedRoomPrivate ? 'Private channel' : 'Public channel' }}
+            · Created by {{ selectedRoom.createdByName }}
+            · {{ selectedRoomMembers.length }} member(s)
           </p>
 
-          <v-list density="compact" class="py-0">
+          <v-list density="compact" class="py-0 member-list">
             <v-list-item
-              v-for="member in selectedRoom.memberDetails"
+              v-for="member in selectedRoomMembers"
               :key="member.id"
               :title="`${member.animal ?? ''} ${member.username}`"
               :subtitle="member.id === selectedRoom.createdBy ? 'Owner' : undefined"
-            />
+            >
+              <template v-slot:append>
+                <v-btn
+                  v-if="isSelectedRoomOwner && member.id !== selectedRoom.createdBy"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  :disabled="isManagingMembers"
+                  @click="handleRemoveMember(member.id)"
+                  title="Remove from channel"
+                >
+                  <v-icon size="small">mdi-close</v-icon>
+                </v-btn>
+              </template>
+            </v-list-item>
           </v-list>
+
+          <!-- Owner: add members anytime -->
+          <template v-if="isSelectedRoomOwner">
+            <div class="text-subtitle2 mt-4 mb-1">Add members</div>
+            <v-autocomplete
+              v-model="membersToAdd"
+              :items="usersNotInSelectedRoom"
+              item-title="label"
+              item-value="id"
+              label="Select users"
+              multiple
+              chips
+              closable-chips
+              variant="outlined"
+              density="compact"
+              hide-details
+              no-data-text="No more users to add"
+            />
+            <v-btn
+              block
+              color="primary"
+              variant="tonal"
+              class="mt-2"
+              :loading="isManagingMembers"
+              :disabled="membersToAdd.length === 0"
+              @click="confirmAddMembers"
+            >
+              Add to channel
+            </v-btn>
+          </template>
         </v-card-text>
         <v-card-actions class="justify-end gap-2">
+          <v-btn
+            v-if="selectedRoom && !isSelectedRoomOwner && authStore.user && selectedRoom.members.includes(authStore.user.id)"
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-exit-run"
+            :loading="isManagingMembers"
+            @click="handleLeaveRoom"
+          >
+            Leave channel
+          </v-btn>
           <v-btn
             v-if="isSelectedRoomOwner"
             color="error"
@@ -739,7 +836,7 @@
             :loading="isManagingMembers"
             @click="handleDeleteRoom"
           >
-            Delete channel
+            Delete
           </v-btn>
           <v-btn variant="text" @click="showMembersDialog = false">Close</v-btn>
         </v-card-actions>
@@ -860,7 +957,10 @@ import {
   createRoom as fbCreateRoom,
   subscribeToRooms,
   joinRoom,
+  leaveRoom,
   deleteRoom,
+  addGroupMembers,
+  removeGroupMember,
   backfillLegacyMessageRooms,
 } from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
@@ -904,7 +1004,7 @@ import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
 import LocationMessage from '@/components/LocationMessage.vue'
-import type { Message, ReplyTo, User, ChatRoom, MemberInfo } from '@/types'
+import type { Message, ReplyTo, User, ChatRoom, MemberInfo, RoomType } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
 
@@ -1035,9 +1135,12 @@ let unsubscribeRooms: (() => void) | null = null
 const showCreateRoomDialog = ref(false)
 const newRoomName = ref('')
 const creatingRoom = ref(false)
+const createRoomVisibility = ref<'public' | 'private'>('public')
+const selectedMemberIds = ref<string[]>([])
 
 const showMembersDialog = ref(false)
 const selectedRoomId = ref<string | null>(null)
+const membersToAdd = ref<string[]>([])
 const isManagingMembers = ref(false)
 
 /** Fallback entry so General is always available even before channels load */
@@ -1070,8 +1173,26 @@ const selectedRoom = computed<ChatRoom | null>(() => {
   return chatStore.rooms.find(r => r.id === selectedRoomId.value) ?? null
 })
 
+const selectedRoomMembers = computed<MemberInfo[]>(() => selectedRoom.value?.memberDetails ?? [])
+
 const isSelectedRoomOwner = computed<boolean>(() => {
   return !!selectedRoom.value && selectedRoom.value.createdBy === authStore.user?.id
+})
+
+const isSelectedRoomPrivate = computed<boolean>(() => {
+  return selectedRoom.value?.type === 'group'
+})
+
+const otherUsers = computed<User[]>(() => {
+  return chatStore.users.filter(u => u.id !== authStore.user?.id)
+})
+
+const usersNotInSelectedRoom = computed<Array<{ id: string; label: string }>>(() => {
+  if (!selectedRoom.value) return []
+  const memberIds = new Set(selectedRoom.value.members || [])
+  return chatStore.users
+    .filter(u => !memberIds.has(u.id))
+    .map(u => ({ id: u.id, label: `${u.animal} ${u.username}` }))
 })
 
 const displayMessages = computed(() => {
@@ -2503,13 +2624,19 @@ async function activateRoom(roomId: string): Promise<void> {
 
   const room = chatStore.rooms.find(r => r.id === roomId)
 
-  // Track membership when opening channels
-  if (room) {
+  // Private channels require membership
+  if (room?.type === 'group' && !room.members.includes(authStore.user.id)) {
+    error.value = `#${room.name} is private — you need to be invited by the channel owner.`
+    return
+  }
+
+  // Track membership when opening public channels
+  if (room?.type === 'room') {
     joinRoom(room.id, {
       id: authStore.user.id,
       username: authStore.user.username,
       animal: authStore.user.animal,
-    }).catch(err => console.warn('[Channels] Join tracking failed:', err))
+    }).catch(err => console.warn('[Channels] Auto-join failed:', err))
   }
 
   chatStore.setCurrentRoom(roomId)
@@ -2527,8 +2654,10 @@ function handleRoomClick(room: ChatRoom): void {
   })
 }
 
-function openCreateDialog(): void {
+function openCreateDialog(visibility: 'public' | 'private' = 'public'): void {
   newRoomName.value = ''
+  createRoomVisibility.value = visibility
+  selectedMemberIds.value = []
   showCreateRoomDialog.value = true
 }
 
@@ -2546,7 +2675,19 @@ async function handleCreateRoom(): Promise<void> {
       animal: authStore.user.animal,
     }
 
-    const room = await fbCreateRoom(name, creator)
+    const type: RoomType = createRoomVisibility.value === 'private' ? 'group' : 'room'
+    const room = await fbCreateRoom(name, type, creator)
+
+    // Private channels: add selected members right away
+    if (type === 'group' && selectedMemberIds.value.length > 0) {
+      const membersToAdd = chatStore.users
+        .filter(u => selectedMemberIds.value.includes(u.id))
+        .map(u => ({ id: u.id, username: u.username, animal: u.animal }))
+
+      if (membersToAdd.length > 0) {
+        await addGroupMembers(room.id, membersToAdd)
+      }
+    }
 
     showCreateRoomDialog.value = false
     console.log(`[Channels] Created channel "${room.name}", switching...`)
@@ -2562,17 +2703,82 @@ async function handleCreateRoom(): Promise<void> {
 
 function openMembersDialog(room: ChatRoom): void {
   selectedRoomId.value = room.id
+  membersToAdd.value = []
   showMembersDialog.value = true
+}
+
+async function confirmAddMembers(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || membersToAdd.value.length === 0) return
+
+  isManagingMembers.value = true
+  try {
+    const users = chatStore.users
+      .filter(u => membersToAdd.value.includes(u.id))
+      .map(u => ({ id: u.id, username: u.username, animal: u.animal }))
+    await addGroupMembers(room.id, users)
+    membersToAdd.value = []
+  } catch (err) {
+    error.value = `Failed to add members: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Add members failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+async function handleRemoveMember(memberId: string): Promise<void> {
+  const room = selectedRoom.value
+  if (!room) return
+
+  isManagingMembers.value = true
+  try {
+    await removeGroupMember(room.id, memberId)
+  } catch (err) {
+    error.value = `Failed to remove member: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Remove member failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+async function handleLeaveRoom(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || !authStore.user) return
+
+  isManagingMembers.value = true
+  try {
+    await leaveRoom(room.id, authStore.user.id)
+    showMembersDialog.value = false
+
+    // If we were viewing that channel, fall back to General
+    if (chatStore.currentRoomId === room.id) {
+      await activateRoom(DEFAULT_ROOM_ID)
+    }
+  } catch (err) {
+    error.value = `Failed to leave channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Leave failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
 }
 
 /**
  * Start a channel call in a popup window (meet.jit.si limits embedded
  * iframes to 5 minutes, but popup windows are unrestricted and login-free).
+ * Config passed via URL hash skips the prejoin name prompt entirely.
  */
 function startCall(): void {
   const roomName = `chitchat-${chatStore.currentRoomId}`
   const displayName = `${authStore.user?.animal ?? ''} ${authStore.user?.username ?? ''}`.trim()
-  callUrl.value = `https://${JITSI_DOMAIN}/${roomName}#userInfo.displayName=${encodeURIComponent(displayName)}`
+
+  // Values wrapped in literal quotes are parsed correctly even with spaces
+  const hashParams = [
+    'config.prejoinPageEnabled=false',
+    'config.startWithVideoMuted=true',
+    `userInfo.displayName=${encodeURIComponent(`"${displayName}"`)}`,
+  ].join('&')
+
+  callUrl.value = `https://${JITSI_DOMAIN}/${roomName}#${hashParams}`
   window.open(callUrl.value, 'chitchat-call', 'width=1280,height=800')
   callActive.value = true
 }
@@ -2823,11 +3029,13 @@ onMounted(async () => {
 
     await startChatSubscriptions(chatStore.currentRoomId)
 
-    // Live channels list
-    unsubscribeRooms = subscribeToRooms((rooms) => {
-      chatStore.setRooms(rooms)
-      console.log('[Channels] Channels updated:', rooms.length)
-    })
+    // Live channels list (public + private channels I'm a member of)
+    if (authStore.user) {
+      unsubscribeRooms = subscribeToRooms(authStore.user.id, (rooms) => {
+        chatStore.setRooms(rooms)
+        console.log('[Channels] Channels updated:', rooms.length)
+      })
+    }
 
     if (isNotificationSupported()) {
       try {
@@ -4011,14 +4219,14 @@ onUnmounted(() => {
 }
 
 .input-section {
-  padding: 0.75rem 1rem 1rem;
+  padding: 0.4rem 0.75rem 0.6rem;
   background-color: var(--bg-primary);
   border-top: 2px solid var(--border-accent);
   border-radius: 16px 16px 0 0;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
   transition: background 0.3s, color 0.3s;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
@@ -4073,6 +4281,7 @@ onUnmounted(() => {
 
 .message-input-wrapper {
   flex: 1;
+  position: relative;
   border: 2px solid var(--clr-primary-a20);
   border-radius: 20px;
   background: var(--bg-tertiary);
@@ -5629,6 +5838,38 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* Inline emoji button inside the message input box */
+.emoji-inline-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #949ba4;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.emoji-inline-btn:hover:not(:disabled) {
+  color: #dbdee1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.emoji-inline-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.message-input :deep(textarea) {
+  padding-right: 42px !important;
+}
+
 .call-btn:hover {
   color: #23a55a !important;
 }
@@ -5666,6 +5907,18 @@ onUnmounted(() => {
   color: #1a7f47;
 }
 
+/* ---------- Channel dialogs ---------- */
+.member-select-list,
+.member-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.visibility-toggle {
+  border-radius: 8px;
+}
+
 .chat-container.light-mode .header-icon-btn {
   color: #4e5058 !important;
 }
@@ -5686,6 +5939,31 @@ onUnmounted(() => {
 
 .message-row:hover {
   background: rgba(78, 80, 88, 0.2);
+}
+
+/* Own messages: mirrored to the right (avatar right, content hugs right) */
+.message-row.own-message {
+  flex-direction: row-reverse;
+  background: rgba(88, 101, 242, 0.1);
+}
+
+.message-row.own-message:hover {
+  background: rgba(88, 101, 242, 0.16);
+}
+
+.message-row.own-message .row-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.message-row.own-message .row-head {
+  flex-direction: row-reverse;
+}
+
+.message-row.own-message .action-buttons {
+  right: auto;
+  left: 24px;
 }
 
 .row-avatar {
@@ -5820,6 +6098,14 @@ onUnmounted(() => {
   background: rgba(6, 6, 7, 0.04);
 }
 
+.chat-container.light-mode .message-row.own-message {
+  background: rgba(88, 101, 242, 0.08);
+}
+
+.chat-container.light-mode .message-row.own-message:hover {
+  background: rgba(88, 101, 242, 0.13);
+}
+
 .chat-container.light-mode .row-body .message-content {
   color: #2e3338;
 }
@@ -5832,6 +6118,15 @@ onUnmounted(() => {
   background: #ffffff;
   border-color: #e3e5e8;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.chat-container.light-mode .emoji-inline-btn {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .emoji-inline-btn:hover:not(:disabled) {
+  color: #060607;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* ---------- Mobile ---------- */
