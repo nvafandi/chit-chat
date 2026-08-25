@@ -3998,7 +3998,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 1.5rem 1rem 1rem 1rem;
+  padding: 2rem 2.5rem 1.5rem 2.5rem;
   flex: 1;
 }
 
@@ -5932,7 +5932,8 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  padding: 6px 48px 6px 16px;
+  width: 100%;
+  padding: 6px 24px 6px 24px;
   position: relative;
   transition: background 0.1s;
 }
@@ -5941,29 +5942,14 @@ onUnmounted(() => {
   background: rgba(78, 80, 88, 0.2);
 }
 
-/* Own messages: mirrored to the right (avatar right, content hugs right) */
+/* Own messages: same internal layout as received, group pushed to the right corner */
 .message-row.own-message {
-  flex-direction: row-reverse;
-  background: rgba(88, 101, 242, 0.1);
-}
-
-.message-row.own-message:hover {
-  background: rgba(88, 101, 242, 0.16);
+  justify-content: flex-end;
 }
 
 .message-row.own-message .row-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.message-row.own-message .row-head {
-  flex-direction: row-reverse;
-}
-
-.message-row.own-message .action-buttons {
-  right: auto;
-  left: 24px;
+  flex: 0 1 auto;
+  max-width: 78%;
 }
 
 .row-avatar {
@@ -6096,14 +6082,6 @@ onUnmounted(() => {
 
 .chat-container.light-mode .message-row:hover {
   background: rgba(6, 6, 7, 0.04);
-}
-
-.chat-container.light-mode .message-row.own-message {
-  background: rgba(88, 101, 242, 0.08);
-}
-
-.chat-container.light-mode .message-row.own-message:hover {
-  background: rgba(88, 101, 242, 0.13);
 }
 
 .chat-container.light-mode .row-body .message-content {
