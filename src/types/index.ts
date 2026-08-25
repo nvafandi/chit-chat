@@ -87,6 +87,22 @@ export interface Message {
     longitude: number    // Longitude coordinate
     label?: string       // Optional human-readable address/label
   }
+  // Live location tracking
+  isLiveLocation?: boolean   // Whether this is a live location message
+  liveLocationId?: string    // Firestore doc ID in liveLocations collection (sender stops here)
+}
+
+export interface LiveLocation {
+  id: string              // Same as message id
+  roomId: string
+  userId: string
+  username: string
+  animal?: string
+  latitude: number
+  longitude: number
+  active: boolean         // false = stopped
+  createdAt: number
+  updatedAt: number
 }
 
 export interface SessionData {

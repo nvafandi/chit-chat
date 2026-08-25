@@ -206,7 +206,8 @@ export async function sendMessage(
     longitude: number
     label?: string
   },
-  roomId?: string
+  roomId?: string,
+  isLiveLocation?: boolean
 ): Promise<Message> {
   const newMessage: Message = {
     id: uuidv4(),
@@ -228,7 +229,8 @@ export async function sendMessage(
     ...(fileType && { fileType }),
     ...(stickerData && { stickerData }),
     ...(attachments && attachments.length > 0 && { attachments }),
-    ...(location && { location })
+    ...(location && { location }),
+    ...(isLiveLocation && { isLiveLocation: true })
   }
 
   try {
@@ -851,4 +853,98 @@ async function getRoomDocRef(roomId: string): Promise<{ ref: DocumentReference; 
 
   const doc = querySnapshot.docs[0]
   return { ref: doc.ref, data: doc.data() as ChatRoom }
+}
+
+// ============================================================================
+// LIVE LOCATIONS COLLECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Start sharing live location: create a liveLocations doc.
+ * Returns the doc ID (same as message ID).
+ */
+export async function startLiveLocation(
+  messageId: string,
+  roomId: string,
+  userId: string,
+  username: string,
+  animal: string,
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  const liveLoc = {
+    id: messageId,
+    roomId,
+    userId,
+    username,
+    animal,
+    latitude,
+    longitude,
+    active: true,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  await addDoc(collection(db, COLLECTIONS.LIVE_LOCATIONS), liveLoc)
+}
+
+/**
+ * Update live location coordinates (throttled by caller).
+ */
+export async function updateLiveLocation(
+  messageId: string,
+  latitude: number,
+  longitude: number
+): Promise<void> {
+  const q = query(collection(db, COLLECTIONS.LIVE_LOCATIONS), where('id', '==', messageId))
+  const snap = await getDocs(q)
+  if (!snap.empty) {
+    await updateDoc(snap.docs[0].ref, {
+      latitude,
+      longitude,
+      updatedAt: Date.now(),
+    })
+  }
+}
+
+/**
+ * Stop sharing: set active = false.
+ */
+export async function stopLiveLocation(messageId: string): Promise<void> {
+  const q = query(collection(db, COLLECTIONS.LIVE_LOCATIONS), where('id', '==', messageId))
+  const snap = await getDocs(q)
+  if (!snap.empty) {
+    await updateDoc(snap.docs[0].ref, {
+      active: false,
+      updatedAt: Date.now(),
+    })
+  }
+}
+
+/**
+ * Subscribe to a single live location doc (real-time).
+ * Returns unsubscribe function.
+ */
+export function subscribeToLiveLocation(
+  messageId: string,
+  callback: (data: import('@/types').LiveLocation | null) => void
+): () => void {
+  const q = query(collection(db, COLLECTIONS.LIVE_LOCATIONS), where('id', '==', messageId))
+  return onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      callback(null)
+    } else {
+      callback(snap.docs[0].data() as import('@/types').LiveLocation)
+    }
+  })
+}
+
+/**
+ * Delete a live location doc (cleanup).
+ */
+export async function deleteLiveLocation(messageId: string): Promise<void> {
+  const q = query(collection(db, COLLECTIONS.LIVE_LOCATIONS), where('id', '==', messageId))
+  const snap = await getDocs(q)
+  if (!snap.empty) {
+    await deleteDoc(snap.docs[0].ref)
+  }
 }

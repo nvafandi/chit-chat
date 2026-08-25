@@ -108,6 +108,7 @@ export const COLLECTIONS = {
   USERS: 'users',
   MESSAGES: 'messages',
   ROOMS: 'rooms',
+  LIVE_LOCATIONS: 'liveLocations',
 }
 
 /** Default (public) room that all users land on */

@@ -11,5 +11,8 @@ service cloud.firestore {
     match /rooms/{document=**} {
       allow read, write: if true;
     }
+    match /liveLocations/{document=**} {
+      allow read, write: if true;
+    }
   }
 }
