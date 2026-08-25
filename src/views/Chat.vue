@@ -11,139 +11,121 @@
   </transition>
 
   <div class="chat-container" :class="{ 'light-mode': !isDark }">
-    <!-- App Bar Header -->
-    <v-app-bar class="gradient-header" elevation="4">
-      <v-container class="header-container">
-        <div class="header-left">
-            <div class="logo-content">
-              <v-icon size="large" class="text-white">mdi-whatsapp</v-icon>
-              <v-icon size="x-large" class="text-white icon-strike-through">mdi-window-close</v-icon>
+    <!-- Channel Sidebar (Discord style) -->
+    <aside class="channel-sidebar" :class="{ open: isSidebarOpen }">
+      <div class="sidebar-server-header">
+        <span class="server-name">CHIT CHuT</span>
+        <v-icon size="16" class="server-chevron">mdi-chevron-down</v-icon>
+      </div>
 
-            </div>
-          <div class="header-info">
-            <h1 class="app-title">CHIT CHuT</h1>
+      <div class="channel-list">
+        <div class="channel-category">Channels</div>
+        <button
+          v-for="room in channels"
+          :key="room.id"
+          class="channel-item"
+          :class="{ active: room.id === chatStore.currentRoomId }"
+          @click="handleRoomClick(room); isSidebarOpen = false"
+        >
+          <span class="channel-hash">#</span>
+          <span class="channel-name">{{ room.name }}</span>
+          <span
+            v-if="room.id !== DEFAULT_ROOM_ID"
+            class="channel-gear"
+            @click.stop="openMembersDialog(room)"
+            title="Channel info"
+          >
+            <v-icon size="14">mdi-cog-outline</v-icon>
+          </span>
+        </button>
+      </div>
 
-            <!-- Channel Selector -->
-            <v-menu location="bottom" transition="slide-y-transition">
-              <template v-slot:activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  size="small"
-                  variant="tonal"
-                  color="white"
-                  class="room-selector mt-1"
-                  data-testid="room-selector"
-                >
-                  <v-icon size="small" class="mr-1">mdi-pound</v-icon>
-                  <span class="room-selector-name">{{ currentRoomName }}</span>
-                  <v-icon size="x-small" class="ml-1">mdi-menu-down</v-icon>
-                </v-btn>
-              </template>
-              <v-card class="room-menu-card" min-width="300" max-height="440">
-                <v-list density="compact" nav class="py-1">
-                  <v-list-subheader class="text-caption font-weight-bold">CHANNELS</v-list-subheader>
-                  <v-list-item
-                    v-for="room in channels"
-                    :key="room.id"
-                    :active="room.id === chatStore.currentRoomId"
-                    :title="room.name"
-                    prepend-icon="mdi-pound"
-                    @click="handleRoomClick(room)"
-                  >
-                    <template v-slot:append>
-                      <v-btn
-                        icon
-                        size="x-small"
-                        variant="text"
-                        @click.stop="openMembersDialog(room)"
-                        title="Channel info"
-                      >
-                        <v-icon size="small">mdi-cog-outline</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-list-item>
-                  <v-divider class="my-1" />
-                  <v-list-item
-                    title="New Channel"
-                    prepend-icon="mdi-chat-plus-outline"
-                    @click="openCreateDialog()"
-                  />
-                </v-list>
-              </v-card>
-            </v-menu>
+      <button class="add-channel-btn" @click="openCreateDialog()">
+        <v-icon size="16">mdi-plus</v-icon>
+        <span>Add Channel</span>
+      </button>
 
-            <div class="header-stats">
-              <div class="stat-item-badge messages-count">
-                <v-icon size="small" class="stat-icon">mdi-message</v-icon>
-                <span class="stat-number">{{ chatStore.totalMessageCount }}</span>
-              </div>
-              <div class="stat-item-badge users-count">
-                <v-icon size="small" class="stat-icon">mdi-account-multiple</v-icon>
-                <span class="stat-number">{{ chatStore.users.length }}</span>
-              </div>
-            </div>
+      <div class="sidebar-footer">
+        <div class="footer-user">
+          <div class="footer-avatar">{{ authStore.user?.animal }}</div>
+          <span class="footer-username">{{ authStore.user?.username }}</span>
+        </div>
+        <div class="footer-actions">
+          <v-btn icon size="x-small" variant="text" @click="handleLogout" class="footer-btn" title="Logout">
+            <v-icon size="18">mdi-logout</v-icon>
+          </v-btn>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile backdrop -->
+    <transition name="fade">
+      <div v-if="isSidebarOpen" class="sidebar-backdrop" @click="isSidebarOpen = false"></div>
+    </transition>
+
+    <!-- Main chat area -->
+    <main class="chat-main">
+      <header class="channel-header">
+        <v-btn
+          class="sidebar-hamburger"
+          icon
+          size="small"
+          variant="text"
+          @click="isSidebarOpen = true"
+        >
+          <v-icon>mdi-menu</v-icon>
+        </v-btn>
+        <v-icon size="20" color="#949ba4">mdi-pound</v-icon>
+        <h2 class="channel-title">{{ currentRoomName }}</h2>
+
+        <div class="header-stats-mini">
+          <span class="stat-pill" title="Messages">
+            <v-icon size="12">mdi-message</v-icon>{{ chatStore.totalMessageCount }}
+          </span>
+          <span class="stat-pill" title="Users">
+            <v-icon size="12">mdi-account-multiple</v-icon>{{ chatStore.users.length }}
+          </span>
+        </div>
+
+        <div class="flex-spacer"></div>
+
+        <!-- Search Bar -->
+        <div class="search-container">
+          <v-text-field
+            v-model="searchQuery"
+            placeholder="Search (min 3 chars)"
+            variant="solo"
+            density="compact"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            hide-details
+            flat
+            class="search-field"
+            :disabled="isLoadingAllMessages"
+            @update:model-value="handleSearch"
+            @click:clear="handleSearchClear"
+          />
+          <div v-if="isLoadingAllMessages" class="search-loading-spinner">
+            <v-progress-circular indeterminate size="20" color="primary" />
+          </div>
+          <div v-else-if="searchQuery.length >= 3" class="search-results-badge">
+            {{ searchResults.length }}
           </div>
         </div>
 
-        <div class="header-right">
-          <!-- Search Bar -->
-          <div class="search-container">
-            <v-text-field
-              v-model="searchQuery"
-              placeholder="Search chat... (min 3 chars)"
-              variant="outlined"
-              density="compact"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-              class="search-field"
-              :disabled="isLoadingAllMessages"
-              @update:model-value="handleSearch"
-              @click:clear="handleSearchClear"
-            />
-            <div v-if="isLoadingAllMessages" class="search-loading-spinner">
-              <v-progress-circular indeterminate size="24" color="primary" />
-            </div>
-            <div v-else-if="searchQuery.length >= 3" class="search-results-badge">
-              {{ searchResults.length }}
-            </div>
-          </div>
+        <!-- Theme Toggle -->
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          @click="toggleTheme"
+          class="header-icon-btn"
+          :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+        >
+          <v-icon size="18">{{ isDark ? 'mdi-white-balance-sunny' : 'mdi-moon-waning-crescent' }}</v-icon>
+        </v-btn>
+      </header>
 
-          <!-- Theme Toggle (Mobile Only) -->
-          <v-btn
-            icon
-            size="x-small"
-            @click="toggleTheme"
-            class="theme-toggle-mobile"
-            :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-          >
-            <v-icon>{{ isDark ? 'mdi-white-balance-sunny' : 'mdi-moon-waning-crescent' }}</v-icon>
-          </v-btn>
-          <v-chip 
-            class="user-chip"
-            color="white" 
-            text-color="primary"
-            size="large"
-          >
-            <span class="animal-emoji">{{ authStore.user?.animal }}</span>
-            <span class="username-text">{{ authStore.user?.username }}</span>
-          </v-chip>
-          <v-btn 
-            color="white"
-            variant="outlined"
-            size="small"
-            append-icon="mdi-logout"
-            @click="handleLogout"
-            class="logout-btn"
-            title="Logout"
-          >
-            Logout
-          </v-btn>
-        </div>
-      </v-container>
-    </v-app-bar>
-
-    <v-container class="chat-content">
       <!-- Messages Display -->
       <div class="messages-container" ref="messagesContainer" @scroll="handleScroll">
         <div v-if="chatStore.messages.length === 0" class="empty-state">
@@ -179,30 +161,22 @@
 
             <div class="message-wrapper" :data-message-id="message.id">
               <div
-                :class="[
-                  'message-item',
-                  isCurrentUser(message.userId) ? 'sent' : 'received',
-                ]"
+                :class="['message-row', { 'own-message': isCurrentUser(message.userId) }]"
+                @mouseenter="hoveredMessageId = message.id"
+                @mouseleave="hoveredMessageId = null"
               >
-                <div class="message-content-container">
-                  <!-- Avatar + Sender name for received messages (aligned) -->
-                  <div v-if="!isCurrentUser(message.userId)" class="message-header">
-                    <div class="message-avatar" :style="{ background: getAvatarColor(message.userId) }">
-                      <span class="avatar-emoji">{{ message.animal }}</span>
-                    </div>
-                    <div class="message-sender-name">
-                      {{ message.username }}
-                      <v-icon v-if="message.pinned" size="x-small" color="red" class="ml-1" title="Pinned message">mdi-pin</v-icon>
-                    </div>
+                <div class="row-avatar" :style="{ background: getAvatarColor(message.userId) }">
+                  {{ message.animal }}
+                </div>
+                <div class="row-body">
+                  <div class="row-head">
+                    <span class="row-author" :style="{ color: getAvatarColor(message.userId) }">{{ message.username }}</span>
+                    <v-icon v-if="message.pinned" size="x-small" color="red" title="Pinned message">mdi-pin</v-icon>
+                    <span class="row-ts">{{ formatTime(message.timestamp) }}</span>
+                    <span v-if="message.replyCount && message.replyCount > 0" class="reply-badge">
+                      {{ message.replyCount }} {{ message.replyCount === 1 ? 'Reply' : 'Replies' }}
+                    </span>
                   </div>
-
-                  <v-card 
-                  :class="['message-card', isCurrentUser(message.userId) ? 'message-sent' : 'message-received']"
-                  elevation="1"
-                  @mouseenter="hoveredMessageId = message.id"
-                  @mouseleave="hoveredMessageId = null"
-                >
-                  <v-card-text class="pa-3 d-flex flex-column">
                     <!-- Quoted Message (Reply To) -->
                     <div v-if="message.replyTo" class="quoted-message" @click="scrollToMessage(message.replyTo.id)">
                       <div class="quoted-content">
@@ -430,16 +404,7 @@
                       </v-btn>
                     </div>
 
-                    <!-- Message Footer: Timestamp and Reply Count -->
-                    <div :class="['message-footer', isCurrentUser(message.userId) ? 'footer-sent' : 'footer-received']">
-                      <div v-if="message.replyCount && message.replyCount > 0" class="reply-badge">
-                        {{ message.replyCount }} {{ message.replyCount === 1 ? 'Reply' : 'Replies' }}
-                      </div>
-                      <span class="message-time">{{ formatTime(message.timestamp) }}</span>
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </div>
+                </div>
               </div>
             </div>
           </div>
@@ -669,7 +634,7 @@
           </v-alert>
         </v-expand-transition>
       </div>
-    </v-container>
+    </main>
 
     <!-- Sticker Picker Dialog -->
     <StickerPicker
@@ -923,6 +888,7 @@ const chatStore = useChatStore()
 const theme = useTheme()
 
 const isDark = ref<boolean>(false)
+const isSidebarOpen = ref(false)
 
 const messageInput = ref('')
 const messageInputRef = ref<any>(null)
@@ -5360,5 +5326,467 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============================================================
+   DISCORD-STYLE LAYOUT
+   ============================================================ */
+.chat-container {
+  flex-direction: row !important;
+  padding: 0;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.channel-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #2b2d31;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  height: 100vh;
+  z-index: 1001;
+}
+
+.sidebar-server-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  font-weight: 700;
+}
+
+.server-name {
+  color: #f2f3f5;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+.server-chevron {
+  color: #949ba4;
+}
+
+.channel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.channel-category {
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 8px 8px 4px;
+}
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #949ba4;
+  font-size: 15px;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.channel-item:hover {
+  background: rgba(78, 80, 88, 0.4);
+  color: #dbdee1;
+}
+
+.channel-item.active {
+  background: rgba(88, 101, 242, 0.25);
+  color: #f2f3f5;
+}
+
+.channel-hash {
+  font-size: 19px;
+  font-weight: 400;
+  opacity: 0.75;
+  line-height: 1;
+}
+
+.channel-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-gear {
+  display: none;
+  color: #949ba4;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.channel-gear:hover {
+  color: #dbdee1;
+}
+
+.channel-item:hover .channel-gear,
+.channel-item.active .channel-gear {
+  display: inline-flex;
+}
+
+.add-channel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #949ba4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.add-channel-btn:hover {
+  background: rgba(78, 80, 88, 0.4);
+  color: #23a55a;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #232428;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.footer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.footer-username {
+  color: #f2f3f5;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.footer-btn {
+  color: #b5bac1 !important;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+}
+
+.sidebar-hamburger {
+  display: none;
+  color: #b5bac1 !important;
+}
+
+/* ---------- Channel header ---------- */
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px;
+  background: #313338;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+  box-shadow: none !important;
+}
+
+.channel-title {
+  color: #f2f3f5;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-stats-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.flex-spacer {
+  flex: 1;
+}
+
+.channel-header .search-field {
+  width: 240px;
+}
+
+.header-icon-btn {
+  color: #b5bac1 !important;
+  flex-shrink: 0;
+}
+
+.chat-container.light-mode .header-icon-btn {
+  color: #4e5058 !important;
+}
+
+/* ---------- Messages (Discord flat style) ---------- */
+.message-wrapper {
+  position: relative;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 6px 48px 6px 16px;
+  position: relative;
+  transition: background 0.1s;
+}
+
+.message-row:hover {
+  background: rgba(78, 80, 88, 0.2);
+}
+
+.row-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-top: 2px;
+  user-select: none;
+}
+
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-author {
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.row-ts {
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.row-body .message-content {
+  color: #dbdee1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.row-body .message-deleted-text {
+  color: #949ba4;
+  font-style: italic;
+}
+
+/* Hover actions — Discord style floating toolbar */
+.message-row .action-buttons {
+  position: absolute;
+  top: -14px;
+  right: 24px;
+  background: #313338;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  padding: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+
+.message-row:hover .action-buttons {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Light mode palette */
+.chat-container.light-mode {
+  --bg-primary: #ffffff;
+}
+
+.chat-container.light-mode .channel-sidebar {
+  background: #f2f3f5;
+  border-right-color: #e3e5e8;
+}
+
+.chat-container.light-mode .sidebar-server-header {
+  border-bottom-color: #e3e5e8;
+}
+
+.chat-container.light-mode .server-name,
+.chat-container.light-mode .footer-username {
+  color: #060607;
+}
+
+.chat-container.light-mode .channel-item {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .channel-item:hover {
+  background: rgba(6, 6, 7, 0.06);
+  color: #060607;
+}
+
+.chat-container.light-mode .channel-item.active {
+  background: rgba(88, 101, 242, 0.15);
+  color: #060607;
+}
+
+.chat-container.light-mode .add-channel-btn {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .sidebar-footer {
+  background: #ebedef;
+}
+
+.chat-container.light-mode .footer-btn {
+  color: #4e5058 !important;
+}
+
+.chat-container.light-mode .channel-header {
+  background: #ffffff;
+  border-bottom-color: #e3e5e8;
+}
+
+.chat-container.light-mode .channel-title {
+  color: #060607;
+}
+
+.chat-container.light-mode .stat-pill {
+  background: rgba(0, 0, 0, 0.05);
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .message-row:hover {
+  background: rgba(6, 6, 7, 0.04);
+}
+
+.chat-container.light-mode .row-body .message-content {
+  color: #2e3338;
+}
+
+.chat-container.light-mode .row-ts {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .message-row .action-buttons {
+  background: #ffffff;
+  border-color: #e3e5e8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 900px) {
+  .channel-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .channel-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-hamburger {
+    display: inline-flex;
+  }
+
+  .header-search :deep(.search-field) {
+    width: 150px;
+  }
+
+  .header-stats-mini {
+    display: none;
+  }
+
+  .message-row {
+    padding: 6px 16px 6px 12px;
+    gap: 10px;
+  }
+
+  .row-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
 }
 </style>
