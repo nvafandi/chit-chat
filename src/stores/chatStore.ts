@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Message, User } from '@/types'
+import type { Message, User, ChatRoom } from '@/types'
+import { DEFAULT_ROOM_ID } from '@/utils/const'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const users = ref<User[]>([])
+  const rooms = ref<ChatRoom[]>([])
+  const currentRoomId = ref<string>(DEFAULT_ROOM_ID)
   const totalMessageCount = ref<number>(0)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -62,6 +65,14 @@ export const useChatStore = defineStore('chat', () => {
 
   function setUsers(newUsers: User[]) {
     users.value = newUsers
+  }
+
+  function setRooms(newRooms: ChatRoom[]) {
+    rooms.value = newRooms
+  }
+
+  function setCurrentRoom(roomId: string) {
+    currentRoomId.value = roomId
   }
 
   function setLoading(loading: boolean) {
@@ -122,6 +133,8 @@ export const useChatStore = defineStore('chat', () => {
   return {
     messages,
     users,
+    rooms,
+    currentRoomId,
     totalMessageCount,
     isLoading,
     error,
@@ -134,6 +147,8 @@ export const useChatStore = defineStore('chat', () => {
     updateMessageHidden,
     updateMessagePin,
     setUsers,
+    setRooms,
+    setCurrentRoom,
     setLoading,
     setError,
     clearError,

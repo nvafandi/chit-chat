@@ -6,6 +6,29 @@ export interface User {
   createdAt: number
 }
 
+export interface MemberInfo {
+  id: string
+  username: string
+  animal?: string
+}
+
+export type RoomType = 'room' | 'group'
+
+/**
+ * 'room'  = public channel (anyone can join)
+ * 'group' = private channel (invite-only, managed by owner)
+ */
+export interface ChatRoom {
+  id: string
+  name: string
+  type: RoomType          // 'room' = public channel, 'group' = private (invite-only) channel
+  createdBy: string       // userId of creator
+  createdByName: string   // username of creator (denormalized)
+  members: string[]       // member userIds (used for membership queries)
+  memberDetails: MemberInfo[] // denormalized member info for display
+  createdAt: number
+}
+
 export interface ReplyTo {
   id: string
   username: string
@@ -26,6 +49,7 @@ export interface Attachment {
 
 export interface Message {
   id: string
+  roomId?: string       // Chat room/group this message belongs to (default: 'general')
   userId: string
   username: string
   animal?: string

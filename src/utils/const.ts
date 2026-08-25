@@ -95,13 +95,27 @@ export const FIREBASE_CONFIG = {
 };
 
 // ============================================================================
+// CALL CONFIGURATION
+// ============================================================================
+/** Jitsi Meet server domain used for channel calls */
+export const JITSI_DOMAIN = 'meet.jit.si'
+
+// ============================================================================
 // DATABASE CONFIGURATION
 // ============================================================================
 /** Firebase collection names */
 export const COLLECTIONS = {
   USERS: 'users',
   MESSAGES: 'messages',
+  ROOMS: 'rooms',
 }
+
+/** Default (public) room that all users land on */
+export const DEFAULT_ROOM_ID = 'general'
+export const DEFAULT_ROOM_NAME = 'General'
+
+/** Maximum room/group name length */
+export const MAX_ROOM_NAME_LENGTH = 30
 
 /** Maximum number of messages to load initially */
 export const MAX_INITIAL_MESSAGES = 1000

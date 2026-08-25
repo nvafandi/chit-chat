@@ -49,20 +49,20 @@
       <div class="app-layout">
         <router-view class="router-view" />
       </div>
-      <AppFooter />
     </template>
   </v-app>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useTheme } from 'vuetify'
 import { validateSession } from '@/services/session'
 import { registerServiceWorker } from '@/services/serviceWorkerManager'
+import { saveAppVersion } from '@/services/storageCleanup'
 import { useRouter } from 'vue-router'
-import AppFooter from '@/components/AppFooter.vue'
 import FireworksOverlay from '@/components/FireworksOverlay.vue'
-import { 
-  COOKIE_CHECK_INTERVAL, 
+import {
+  COOKIE_CHECK_INTERVAL,
   ENABLE_OPENING_COUNTDOWN,
   ENABLE_CLOSING_COUNTDOWN,
   TIME_OPEN,
@@ -71,10 +71,11 @@ import {
   OPENING_TEXT_SUB,
   CLOSING_TEXT_MAIN,
   CLOSING_TEXT_SUB,
-  CLOSING_TEXT_DESC
+  CLOSING_TEXT_DESC,
 } from '@/utils/const'
 
 const router = useRouter()
+const theme = useTheme()
 let checkInterval: ReturnType<typeof setInterval> | null = null
 let phaseCheckInterval: ReturnType<typeof setInterval> | null = null
 
@@ -178,6 +179,18 @@ function handleVisibilityChange(): void {
 }
 
 onMounted(() => {
+  // Apply saved theme globally (was previously handled by AppFooter)
+  const savedTheme = localStorage.getItem('theme') || 'dark'
+  theme.change(savedTheme)
+  if (savedTheme === 'dark') {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+
+  // Sync stale version in localStorage with current app version
+  saveAppVersion()
+
   // Unlock audio globally on any user interaction
   window.addEventListener('click', initGlobalAudio)
   window.addEventListener('touchstart', initGlobalAudio)

@@ -11,89 +11,152 @@
   </transition>
 
   <div class="chat-container" :class="{ 'light-mode': !isDark }">
-    <!-- App Bar Header -->
-    <v-app-bar class="gradient-header" elevation="4">
-      <v-container class="header-container">
-        <div class="header-left">
-            <div class="logo-content">
-              <v-icon size="large" class="text-white">mdi-whatsapp</v-icon>
-              <v-icon size="x-large" class="text-white icon-strike-through">mdi-window-close</v-icon>
+    <!-- Channel Sidebar (Discord style) -->
+    <aside class="channel-sidebar" :class="{ open: isSidebarOpen }">
+      <div class="sidebar-server-header">
+        <span class="server-name">CHIT CHuT</span>
+        <v-icon size="16" class="server-chevron">mdi-chevron-down</v-icon>
+      </div>
 
-            </div>
-          <div class="header-info">
-            <h1 class="app-title">CHIT CHuT</h1>
-            <div class="header-stats">
-              <div class="stat-item-badge messages-count">
-                <v-icon size="small" class="stat-icon">mdi-message</v-icon>
-                <span class="stat-number">{{ chatStore.totalMessageCount }}</span>
-              </div>
-              <div class="stat-item-badge users-count">
-                <v-icon size="small" class="stat-icon">mdi-account-multiple</v-icon>
-                <span class="stat-number">{{ chatStore.users.length }}</span>
-              </div>
-            </div>
+      <div class="channel-list">
+        <div class="channel-category">Channels</div>
+        <button
+          v-for="room in channels"
+          :key="room.id"
+          class="channel-item"
+          :class="{ active: room.id === chatStore.currentRoomId }"
+          @click="handleRoomClick(room); isSidebarOpen = false"
+        >
+          <span class="channel-hash">#</span>
+          <span class="channel-name">{{ room.name }}</span>
+          <v-icon
+            v-if="room.type === 'group'"
+            size="12"
+            color="#949ba4"
+            title="Private channel"
+          >mdi-lock-outline</v-icon>
+          <span
+            v-if="room.id !== DEFAULT_ROOM_ID"
+            class="channel-gear"
+            @click.stop="openMembersDialog(room)"
+            :title="room.type === 'group' ? 'Manage members' : 'Channel info'"
+          >
+            <v-icon size="14">mdi-cog-outline</v-icon>
+          </span>
+        </button>
+      </div>
+
+      <button class="add-channel-btn" @click="openCreateDialog()">
+        <v-icon size="16">mdi-plus</v-icon>
+        <span>Add Channel</span>
+      </button>
+
+      <div class="sidebar-footer">
+        <div class="footer-user">
+          <div class="footer-avatar">{{ authStore.user?.animal }}</div>
+          <span class="footer-username">{{ authStore.user?.username }}</span>
+        </div>
+        <div class="footer-actions">
+          <v-btn icon size="x-small" variant="text" @click="handleLogout" class="footer-btn" title="Logout">
+            <v-icon size="18">mdi-logout</v-icon>
+          </v-btn>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Mobile backdrop -->
+    <transition name="fade">
+      <div v-if="isSidebarOpen" class="sidebar-backdrop" @click="isSidebarOpen = false"></div>
+    </transition>
+
+    <!-- Main chat area -->
+    <main class="chat-main">
+      <header class="channel-header">
+        <v-btn
+          class="sidebar-hamburger"
+          icon
+          size="small"
+          variant="text"
+          @click="isSidebarOpen = true"
+        >
+          <v-icon>mdi-menu</v-icon>
+        </v-btn>
+        <v-icon size="20" color="#949ba4">mdi-pound</v-icon>
+        <h2 class="channel-title">{{ currentRoomName }}</h2>
+
+        <div class="header-stats-mini">
+          <span class="stat-pill" title="Messages">
+            <v-icon size="12">mdi-message</v-icon>{{ chatStore.totalMessageCount }}
+          </span>
+          <span class="stat-pill" title="Users">
+            <v-icon size="12">mdi-account-multiple</v-icon>{{ chatStore.users.length }}
+          </span>
+        </div>
+
+        <div class="flex-spacer"></div>
+
+        <!-- Search Bar -->
+        <div class="search-container">          <v-text-field
+            v-model="searchQuery"
+            placeholder="Search (min 3 chars)"
+            variant="solo"
+            density="compact"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            hide-details
+            flat
+            class="search-field"
+            :disabled="isLoadingAllMessages"
+            @update:model-value="handleSearch"
+            @click:clear="handleSearchClear"
+          />
+          <div v-if="isLoadingAllMessages" class="search-loading-spinner">
+            <v-progress-circular indeterminate size="20" color="primary" />
+          </div>
+          <div v-else-if="searchQuery.length >= 3" class="search-results-badge">
+            {{ searchResults.length }}
           </div>
         </div>
 
-        <div class="header-right">
-          <!-- Search Bar -->
-          <div class="search-container">
-            <v-text-field
-              v-model="searchQuery"
-              placeholder="Search chat... (min 3 chars)"
-              variant="outlined"
-              density="compact"
-              prepend-inner-icon="mdi-magnify"
-              clearable
-              hide-details
-              class="search-field"
-              :disabled="isLoadingAllMessages"
-              @update:model-value="handleSearch"
-              @click:clear="handleSearchClear"
-            />
-            <div v-if="isLoadingAllMessages" class="search-loading-spinner">
-              <v-progress-circular indeterminate size="24" color="primary" />
-            </div>
-            <div v-else-if="searchQuery.length >= 3" class="search-results-badge">
-              {{ searchResults.length }}
-            </div>
-          </div>
+        <!-- Start Call -->
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          @click="startCall"
+          class="header-icon-btn call-btn"
+          title="Start channel call (voice + screen share)"
+        >
+          <v-icon size="18">mdi-phone-outline</v-icon>
+        </v-btn>
 
-          <!-- Theme Toggle (Mobile Only) -->
-          <v-btn
-            icon
-            size="x-small"
-            @click="toggleTheme"
-            class="theme-toggle-mobile"
-            :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
-          >
-            <v-icon>{{ isDark ? 'mdi-white-balance-sunny' : 'mdi-moon-waning-crescent' }}</v-icon>
-          </v-btn>
-          <v-chip 
-            class="user-chip"
-            color="white" 
-            text-color="primary"
-            size="large"
-          >
-            <span class="animal-emoji">{{ authStore.user?.animal }}</span>
-            <span class="username-text">{{ authStore.user?.username }}</span>
-          </v-chip>
-          <v-btn 
-            color="white"
-            variant="outlined"
-            size="small"
-            append-icon="mdi-logout"
-            @click="handleLogout"
-            class="logout-btn"
-            title="Logout"
-          >
-            Logout
+        <!-- Theme Toggle -->
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          @click="toggleTheme"
+          class="header-icon-btn"
+          :title="isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+        >
+          <v-icon size="18">{{ isDark ? 'mdi-white-balance-sunny' : 'mdi-moon-waning-crescent' }}</v-icon>
+        </v-btn>
+      </header>
+
+      <!-- Messages Display -->
+      <!-- Active call banner (Jitsi opens in a popup window) -->
+      <transition name="fade">
+        <div v-if="callActive" class="call-banner">
+          <v-icon size="16" color="#23a55a">mdi-phone-in-talk-outline</v-icon>
+          <span class="call-banner-text">Channel call is active</span>
+          <a :href="callUrl" target="_blank" class="call-banner-rejoin">Rejoin</a>
+          <div class="flex-spacer"></div>
+          <v-btn icon size="x-small" variant="text" @click="endCall" title="Dismiss">
+            <v-icon size="16">mdi-close</v-icon>
           </v-btn>
         </div>
-      </v-container>
-    </v-app-bar>
+      </transition>
 
-    <v-container class="chat-content">
       <!-- Messages Display -->
       <div class="messages-container" ref="messagesContainer" @scroll="handleScroll">
         <div v-if="chatStore.messages.length === 0" class="empty-state">
@@ -129,30 +192,22 @@
 
             <div class="message-wrapper" :data-message-id="message.id">
               <div
-                :class="[
-                  'message-item',
-                  isCurrentUser(message.userId) ? 'sent' : 'received',
-                ]"
+                :class="['message-row', { 'own-message': isCurrentUser(message.userId) }]"
+                @mouseenter="hoveredMessageId = message.id"
+                @mouseleave="hoveredMessageId = null"
               >
-                <div class="message-content-container">
-                  <!-- Avatar + Sender name for received messages (aligned) -->
-                  <div v-if="!isCurrentUser(message.userId)" class="message-header">
-                    <div class="message-avatar" :style="{ background: getAvatarColor(message.userId) }">
-                      <span class="avatar-emoji">{{ message.animal }}</span>
-                    </div>
-                    <div class="message-sender-name">
-                      {{ message.username }}
-                      <v-icon v-if="message.pinned" size="x-small" color="red" class="ml-1" title="Pinned message">mdi-pin</v-icon>
-                    </div>
+                <div class="row-avatar" :style="{ background: getAvatarColor(message.userId) }">
+                  {{ message.animal }}
+                </div>
+                <div class="row-body">
+                  <div class="row-head">
+                    <span class="row-author" :style="{ color: getAvatarColor(message.userId) }">{{ message.username }}</span>
+                    <v-icon v-if="message.pinned" size="x-small" color="red" title="Pinned message">mdi-pin</v-icon>
+                    <span class="row-ts">{{ formatTime(message.timestamp) }}</span>
+                    <span v-if="message.replyCount && message.replyCount > 0" class="reply-badge">
+                      {{ message.replyCount }} {{ message.replyCount === 1 ? 'Reply' : 'Replies' }}
+                    </span>
                   </div>
-
-                  <v-card 
-                  :class="['message-card', isCurrentUser(message.userId) ? 'message-sent' : 'message-received']"
-                  elevation="1"
-                  @mouseenter="hoveredMessageId = message.id"
-                  @mouseleave="hoveredMessageId = null"
-                >
-                  <v-card-text class="pa-3 d-flex flex-column">
                     <!-- Quoted Message (Reply To) -->
                     <div v-if="message.replyTo" class="quoted-message" @click="scrollToMessage(message.replyTo.id)">
                       <div class="quoted-content">
@@ -380,16 +435,7 @@
                       </v-btn>
                     </div>
 
-                    <!-- Message Footer: Timestamp and Reply Count -->
-                    <div :class="['message-footer', isCurrentUser(message.userId) ? 'footer-sent' : 'footer-received']">
-                      <div v-if="message.replyCount && message.replyCount > 0" class="reply-badge">
-                        {{ message.replyCount }} {{ message.replyCount === 1 ? 'Reply' : 'Replies' }}
-                      </div>
-                      <span class="message-time">{{ formatTime(message.timestamp) }}</span>
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </div>
+                </div>
               </div>
             </div>
           </div>
@@ -510,7 +556,7 @@
                 <template v-slot:activator="{ props }">
                   <v-btn
                     icon
-                    size="large"
+                    size="default"
                     variant="tonal"
                     color="primary"
                     class="upload-btn"
@@ -522,27 +568,11 @@
                   </v-btn>
                 </template>
               </v-tooltip>
-              <v-tooltip text="Send Sticker">
-                <template v-slot:activator="{ props }">
-                  <v-btn
-                    icon
-                    size="large"
-                    variant="tonal"
-                    color="primary"
-                    class="sticker-btn"
-                    @click="showStickerPicker = true"
-                    :disabled="isLoading || isCompressing"
-                    v-bind="props"
-                  >
-                    <v-icon>mdi-emoticon-happy</v-icon>
-                  </v-btn>
-                </template>
-              </v-tooltip>
               <v-tooltip text="Share Location">
                 <template v-slot:activator="{ props }">
                   <v-btn
                     icon
-                    size="large"
+                    size="default"
                     variant="tonal"
                     color="primary"
                     class="location-btn"
@@ -579,6 +609,15 @@
                   @input="updateCursorPosition"
                   @paste="handlePasteFile"
                 />
+                <button
+                  class="emoji-inline-btn"
+                  type="button"
+                  @click.prevent="showStickerPicker = true"
+                  :disabled="isLoading || isCompressing"
+                  title="Send Sticker"
+                >
+                  <v-icon size="20">mdi-emoticon-happy-outline</v-icon>
+                </button>
               </div>
             </div>
             <v-btn
@@ -587,12 +626,12 @@
               color="primary"
               :loading="isLoading || isCompressing"
               :disabled="(!messageInput.trim() && selectedFiles.length === 0) || isLoading || isCompressing"
-              size="large"
+              size="default"
               class="send-btn"
               title="Send message (Press Enter or click button)"
               variant="elevated"
             >
-              <v-icon size="large" color="white">mdi-send-circle</v-icon>
+              <v-icon size="default" color="white">mdi-send-circle</v-icon>
             </v-btn>
           </div>
         </v-form>
@@ -619,13 +658,190 @@
           </v-alert>
         </v-expand-transition>
       </div>
-    </v-container>
+    </main>
 
     <!-- Sticker Picker Dialog -->
     <StickerPicker
       v-model="showStickerPicker"
       @select="handleSelectSticker"
     />
+
+    <!-- Create Channel Dialog -->
+    <v-dialog
+      v-model="showCreateRoomDialog"
+      max-width="420"
+      persistent
+    >
+      <v-card>
+        <v-card-title class="text-h6">Create Channel</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="newRoomName"
+            label="Channel name"
+            variant="outlined"
+            density="compact"
+            counter="30"
+            maxlength="30"
+            hide-details="auto"
+            autofocus
+            @keyup.enter="handleCreateRoom"
+          />
+
+          <div class="text-subtitle2 mt-4 mb-2">Visibility</div>
+          <v-btn-toggle
+            v-model="createRoomVisibility"
+            mandatory
+            color="primary"
+            density="compact"
+            class="visibility-toggle"
+          >
+            <v-btn value="public" prepend-icon="mdi-hash">
+              Public
+            </v-btn>
+            <v-btn value="private" prepend-icon="mdi-lock-outline">
+              Private
+            </v-btn>
+          </v-btn-toggle>
+          <p class="text-caption text-grey mt-2">
+            {{
+              createRoomVisibility === 'private'
+                ? 'Only invited members can see and join this channel. You can add members anytime.'
+                : 'Visible to everyone — users join automatically when they open it.'
+            }}
+          </p>
+
+          <!-- Private: pick initial members -->
+          <template v-if="createRoomVisibility === 'private'">
+            <div class="text-subtitle2 mt-4 mb-1">Invite members (optional)</div>
+            <div v-if="otherUsers.length === 0" class="text-caption text-grey">
+              No other users registered yet.
+            </div>
+            <div v-else class="member-select-list">
+              <v-checkbox
+                v-for="user in otherUsers"
+                :key="user.id"
+                v-model="selectedMemberIds"
+                :value="user.id"
+                :label="`${user.animal} ${user.username}`"
+                hide-details
+                density="compact"
+              />
+            </div>
+          </template>
+        </v-card-text>
+        <v-card-actions class="justify-end gap-2">
+          <v-btn variant="tonal" @click="showCreateRoomDialog = false" :disabled="creatingRoom">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="elevated"
+            :loading="creatingRoom"
+            :disabled="!newRoomName.trim()"
+            @click="handleCreateRoom"
+          >
+            Create
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Channel Info / Members Dialog -->
+    <v-dialog
+      v-model="showMembersDialog"
+      max-width="420"
+    >
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon size="small" class="mr-2">
+            {{ isSelectedRoomPrivate ? 'mdi-lock-outline' : 'mdi-pound' }}
+          </v-icon>
+          {{ selectedRoom?.name || 'Channel' }}
+        </v-card-title>
+        <v-card-text v-if="selectedRoom">
+          <p class="text-caption text-grey mb-2">
+            {{ isSelectedRoomPrivate ? 'Private channel' : 'Public channel' }}
+            · Created by {{ selectedRoom.createdByName }}
+            · {{ selectedRoomMembers.length }} member(s)
+          </p>
+
+          <v-list density="compact" class="py-0 member-list">
+            <v-list-item
+              v-for="member in selectedRoomMembers"
+              :key="member.id"
+              :title="`${member.animal ?? ''} ${member.username}`"
+              :subtitle="member.id === selectedRoom.createdBy ? 'Owner' : undefined"
+            >
+              <template v-slot:append>
+                <v-btn
+                  v-if="isSelectedRoomOwner && member.id !== selectedRoom.createdBy"
+                  icon
+                  size="x-small"
+                  variant="text"
+                  color="error"
+                  :disabled="isManagingMembers"
+                  @click="handleRemoveMember(member.id)"
+                  title="Remove from channel"
+                >
+                  <v-icon size="small">mdi-close</v-icon>
+                </v-btn>
+              </template>
+            </v-list-item>
+          </v-list>
+
+          <!-- Owner: add members anytime -->
+          <template v-if="isSelectedRoomOwner">
+            <div class="text-subtitle2 mt-4 mb-1">Add members</div>
+            <v-autocomplete
+              v-model="membersToAdd"
+              :items="usersNotInSelectedRoom"
+              item-title="label"
+              item-value="id"
+              label="Select users"
+              multiple
+              chips
+              closable-chips
+              variant="outlined"
+              density="compact"
+              hide-details
+              no-data-text="No more users to add"
+            />
+            <v-btn
+              block
+              color="primary"
+              variant="tonal"
+              class="mt-2"
+              :loading="isManagingMembers"
+              :disabled="membersToAdd.length === 0"
+              @click="confirmAddMembers"
+            >
+              Add to channel
+            </v-btn>
+          </template>
+        </v-card-text>
+        <v-card-actions class="justify-end gap-2">
+          <v-btn
+            v-if="selectedRoom && !isSelectedRoomOwner && authStore.user && selectedRoom.members.includes(authStore.user.id)"
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-exit-run"
+            :loading="isManagingMembers"
+            @click="handleLeaveRoom"
+          >
+            Leave channel
+          </v-btn>
+          <v-btn
+            v-if="isSelectedRoomOwner"
+            color="error"
+            variant="tonal"
+            prepend-icon="mdi-delete-outline"
+            :loading="isManagingMembers"
+            @click="handleDeleteRoom"
+          >
+            Delete
+          </v-btn>
+          <v-btn variant="text" @click="showMembersDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Delete Confirmation Dialog -->
     <v-dialog
@@ -727,7 +943,26 @@ import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
-import { sendMessage, getMessages, subscribeToMessages, subscribeToUsers, subscribeToMessageCount, getUserById, hideMessage, getMessagesBefore, pinMessage, unpinMessage } from '@/services/firebase'
+import {
+  sendMessage,
+  getMessages,
+  subscribeToMessages,
+  subscribeToUsers,
+  subscribeToMessageCount,
+  getUserById,
+  hideMessage,
+  getMessagesBefore,
+  pinMessage,
+  unpinMessage,
+  createRoom as fbCreateRoom,
+  subscribeToRooms,
+  joinRoom,
+  leaveRoom,
+  deleteRoom,
+  addGroupMembers,
+  removeGroupMember,
+  backfillLegacyMessageRooms,
+} from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
 import { validateSession } from '@/services/session'
@@ -740,15 +975,19 @@ import {
   playNotificationSoundDouble,
   initAudioContext,
 } from '@/services/notificationService'
-import { 
-  PERIODIC_CLEANUP_INTERVAL, 
-  AUTO_CLEANUP_ON_MOUNT, 
+import {
+  PERIODIC_CLEANUP_INTERVAL,
+  AUTO_CLEANUP_ON_MOUNT,
   CHECK_FILE_ON_NEW_MESSAGE,
   TOAST_TIMEOUT,
   MESSAGE_HIGHLIGHT_DURATION,
   SCROLL_DELAY,
   SCROLL_LOAD_THRESHOLD,
   SCROLL_DEBOUNCE_MS,
+  DEFAULT_ROOM_ID,
+  DEFAULT_ROOM_NAME,
+  MAX_ROOM_NAME_LENGTH,
+  JITSI_DOMAIN,
 } from '@/utils/const'
 import { compressImageMaximum, formatFileSize, isCompressibleImage, validateFileForUpload } from '@/utils/imageCompression'
 import { isCurlRequest, getCurlCopyableText } from '@/utils/curlFormatter'
@@ -765,7 +1004,7 @@ import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
 import LocationMessage from '@/components/LocationMessage.vue'
-import type { Message, ReplyTo, User } from '@/types'
+import type { Message, ReplyTo, User, ChatRoom, MemberInfo, RoomType } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
 
@@ -775,6 +1014,9 @@ const chatStore = useChatStore()
 const theme = useTheme()
 
 const isDark = ref<boolean>(false)
+const isSidebarOpen = ref(false)
+const callActive = ref(false)
+const callUrl = ref('')
 
 const messageInput = ref('')
 const messageInputRef = ref<any>(null)
@@ -883,6 +1125,75 @@ const pendingLocation = ref<{
   longitude: number
   label?: string
 } | null>(null)
+
+// ============================================================================
+// CHANNELS STATE
+// ============================================================================
+const CURRENT_ROOM_STORAGE_KEY = 'current_room_id'
+let unsubscribeRooms: (() => void) | null = null
+
+const showCreateRoomDialog = ref(false)
+const newRoomName = ref('')
+const creatingRoom = ref(false)
+const createRoomVisibility = ref<'public' | 'private'>('public')
+const selectedMemberIds = ref<string[]>([])
+
+const showMembersDialog = ref(false)
+const selectedRoomId = ref<string | null>(null)
+const membersToAdd = ref<string[]>([])
+const isManagingMembers = ref(false)
+
+/** Fallback entry so General is always available even before channels load */
+const generalRoom: ChatRoom = {
+  id: DEFAULT_ROOM_ID,
+  name: DEFAULT_ROOM_NAME,
+  type: 'room',
+  createdBy: '',
+  createdByName: '',
+  members: [],
+  memberDetails: [],
+  createdAt: 0,
+}
+
+const channels = computed<ChatRoom[]>(() => {
+  const list = [...chatStore.rooms]
+  if (!list.some(r => r.id === DEFAULT_ROOM_ID)) {
+    list.unshift(generalRoom)
+  }
+  return list.sort((a, b) => a.createdAt - b.createdAt)
+})
+
+const currentRoomName = computed<string>(() => {
+  if (chatStore.currentRoomId === DEFAULT_ROOM_ID) return DEFAULT_ROOM_NAME
+  return chatStore.rooms.find(r => r.id === chatStore.currentRoomId)?.name || chatStore.currentRoomId
+})
+
+const selectedRoom = computed<ChatRoom | null>(() => {
+  if (!selectedRoomId.value) return null
+  return chatStore.rooms.find(r => r.id === selectedRoomId.value) ?? null
+})
+
+const selectedRoomMembers = computed<MemberInfo[]>(() => selectedRoom.value?.memberDetails ?? [])
+
+const isSelectedRoomOwner = computed<boolean>(() => {
+  return !!selectedRoom.value && selectedRoom.value.createdBy === authStore.user?.id
+})
+
+const isSelectedRoomPrivate = computed<boolean>(() => {
+  return selectedRoom.value?.type === 'group'
+})
+
+const otherUsers = computed<User[]>(() => {
+  return chatStore.users.filter(u => u.id !== authStore.user?.id)
+})
+
+const usersNotInSelectedRoom = computed<Array<{ id: string; label: string }>>(() => {
+  if (!selectedRoom.value) return []
+  const memberIds = new Set(selectedRoom.value.members || [])
+  return chatStore.users
+    .filter(u => !memberIds.has(u.id))
+    .map(u => ({ id: u.id, label: `${u.animal} ${u.username}` }))
+})
 
 const displayMessages = computed(() => {
   return searchQuery.value.length >= 3 ? searchResults.value : chatStore.messages
@@ -1812,7 +2123,8 @@ async function handleSendMessage() {
       undefined,
       pendingStickerData.value || undefined,
       attachments.length > 0 ? attachments : undefined,
-      pendingLocation.value || undefined
+      pendingLocation.value || undefined,
+      chatStore.currentRoomId
     )
     
     lastSentMessageId = sentMessage.id
@@ -1872,7 +2184,7 @@ async function loadMoreMessages() {
     console.log(`[Chat] Before prepend - height: ${prevScrollHeight}px, top: ${prevScrollTop}px`)
     
     const oldestMessage = chatStore.messages[0]
-    const olderMessages = await getMessagesBefore(oldestMessage)
+    const olderMessages = await getMessagesBefore(oldestMessage, chatStore.currentRoomId)
 
     if (olderMessages.length === 0) {
       hasMoreMessages.value = false
@@ -1970,7 +2282,7 @@ async function loadAllMessagesForSearch() {
       }
       
       const oldestMessage = chatStore.messages[0]
-      const olderMessages = await getMessagesBefore(oldestMessage)
+      const olderMessages = await getMessagesBefore(oldestMessage, chatStore.currentRoomId)
       
       if (olderMessages.length === 0) {
         hasMoreMessages.value = false
@@ -2229,6 +2541,442 @@ async function handleLogout() {
   router.push('/create-account')
 }
 
+// ============================================================================
+// ROOMS & GROUPS LOGIC
+// ============================================================================
+
+/**
+ * Load initial messages for a room and (re)subscribe to its live updates.
+ * Also re-subscribes the global users listener.
+ */
+async function startChatSubscriptions(roomId: string): Promise<void> {
+  // Stop any previous room-scoped subscriptions
+  chatStore.unsubscribeFromUpdates()
+
+  // Reset per-room state
+  chatStore.setMessages([])
+  hasMoreMessages.value = true
+  lastSentMessageId = null
+  lastProcessedMessageIds = new Set()
+  notifiedMessageIds = new Set()
+
+  console.log(`[Rooms] Loading room "${roomId}"...`)
+
+  const initialMessages = await getMessages(roomId)
+  chatStore.setMessages(initialMessages)
+
+  lastProcessedMessageIds = new Set(initialMessages.map(m => m.id))
+  notifiedMessageIds = new Set(initialMessages.map(m => m.id))
+
+  try {
+    if (AUTO_CLEANUP_ON_MOUNT) {
+      console.log('🔄 Performing initial file availability check...')
+      const cleanupResult = await performFileCleanup(initialMessages)
+      console.log('✅ File cleanup completed:', cleanupResult)
+    }
+  } catch (err) {
+    console.error('⚠️ File cleanup error (non-critical):', err)
+  }
+
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, SCROLL_DELAY))
+  scrollToBottom()
+
+  setAction('init')
+
+  if (messagesContainer.value) {
+    lastKnownScrollTop = messagesContainer.value.scrollTop
+  }
+
+  const unsubscribe = subscribeToMessages((messages) => processIncomingMessages(messages), roomId)
+  chatStore.setUnsubscribe(unsubscribe)
+
+  const unsubscribeUsers = subscribeToUsers((users) => {
+    if (!validateSession()) {
+      handleSessionExpiredWithToast()
+      return
+    }
+    chatStore.setUsers(users)
+  })
+  chatStore.setUnsubscribeUsers(unsubscribeUsers)
+
+  const unsubscribeMessageCount = subscribeToMessageCount((count) => {
+    if (!validateSession()) {
+      handleSessionExpiredWithToast()
+      return
+    }
+    chatStore.setMessageCount(count)
+    console.log('[Chat] Message count updated:', count)
+  }, roomId)
+  chatStore.setUnsubscribeMessageCount(unsubscribeMessageCount)
+
+  console.log(`[Rooms] Subscribed to room "${roomId}" (${initialMessages.length} initial messages)`)
+}
+
+/**
+ * Switch the active channel and track membership.
+ */
+async function activateRoom(roomId: string): Promise<void> {
+  if (!authStore.user || roomId === chatStore.currentRoomId) return
+
+  // Leaving a channel ends any active call in it
+  endCall()
+
+  const room = chatStore.rooms.find(r => r.id === roomId)
+
+  // Private channels require membership
+  if (room?.type === 'group' && !room.members.includes(authStore.user.id)) {
+    error.value = `#${room.name} is private — you need to be invited by the channel owner.`
+    return
+  }
+
+  // Track membership when opening public channels
+  if (room?.type === 'room') {
+    joinRoom(room.id, {
+      id: authStore.user.id,
+      username: authStore.user.username,
+      animal: authStore.user.animal,
+    }).catch(err => console.warn('[Channels] Auto-join failed:', err))
+  }
+
+  chatStore.setCurrentRoom(roomId)
+  try {
+    localStorage.setItem(CURRENT_ROOM_STORAGE_KEY, roomId)
+  } catch { /* storage unavailable - ignore */ }
+
+  await startChatSubscriptions(roomId)
+}
+
+function handleRoomClick(room: ChatRoom): void {
+  activateRoom(room.id).catch(err => {
+    error.value = `Failed to open room: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Rooms] Failed to switch room:', err)
+  })
+}
+
+function openCreateDialog(visibility: 'public' | 'private' = 'public'): void {
+  newRoomName.value = ''
+  createRoomVisibility.value = visibility
+  selectedMemberIds.value = []
+  showCreateRoomDialog.value = true
+}
+
+async function handleCreateRoom(): Promise<void> {
+  const name = newRoomName.value.trim()
+  if (!name || !authStore.user || name.length > MAX_ROOM_NAME_LENGTH) return
+
+  creatingRoom.value = true
+  error.value = null
+
+  try {
+    const creator: MemberInfo = {
+      id: authStore.user.id,
+      username: authStore.user.username,
+      animal: authStore.user.animal,
+    }
+
+    const type: RoomType = createRoomVisibility.value === 'private' ? 'group' : 'room'
+    const room = await fbCreateRoom(name, type, creator)
+
+    // Private channels: add selected members right away
+    if (type === 'group' && selectedMemberIds.value.length > 0) {
+      const membersToAdd = chatStore.users
+        .filter(u => selectedMemberIds.value.includes(u.id))
+        .map(u => ({ id: u.id, username: u.username, animal: u.animal }))
+
+      if (membersToAdd.length > 0) {
+        await addGroupMembers(room.id, membersToAdd)
+      }
+    }
+
+    showCreateRoomDialog.value = false
+    console.log(`[Channels] Created channel "${room.name}", switching...`)
+
+    await activateRoom(room.id)
+  } catch (err) {
+    error.value = `Failed to create channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Create failed:', err)
+  } finally {
+    creatingRoom.value = false
+  }
+}
+
+function openMembersDialog(room: ChatRoom): void {
+  selectedRoomId.value = room.id
+  membersToAdd.value = []
+  showMembersDialog.value = true
+}
+
+async function confirmAddMembers(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || membersToAdd.value.length === 0) return
+
+  isManagingMembers.value = true
+  try {
+    const users = chatStore.users
+      .filter(u => membersToAdd.value.includes(u.id))
+      .map(u => ({ id: u.id, username: u.username, animal: u.animal }))
+    await addGroupMembers(room.id, users)
+    membersToAdd.value = []
+  } catch (err) {
+    error.value = `Failed to add members: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Add members failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+async function handleRemoveMember(memberId: string): Promise<void> {
+  const room = selectedRoom.value
+  if (!room) return
+
+  isManagingMembers.value = true
+  try {
+    await removeGroupMember(room.id, memberId)
+  } catch (err) {
+    error.value = `Failed to remove member: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Remove member failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+async function handleLeaveRoom(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || !authStore.user) return
+
+  isManagingMembers.value = true
+  try {
+    await leaveRoom(room.id, authStore.user.id)
+    showMembersDialog.value = false
+
+    // If we were viewing that channel, fall back to General
+    if (chatStore.currentRoomId === room.id) {
+      await activateRoom(DEFAULT_ROOM_ID)
+    }
+  } catch (err) {
+    error.value = `Failed to leave channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Leave failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+/**
+ * Start a channel call in a popup window (meet.jit.si limits embedded
+ * iframes to 5 minutes, but popup windows are unrestricted and login-free).
+ * Config passed via URL hash skips the prejoin name prompt entirely.
+ */
+function startCall(): void {
+  const roomName = `chitchat-${chatStore.currentRoomId}`
+  const displayName = `${authStore.user?.animal ?? ''} ${authStore.user?.username ?? ''}`.trim()
+
+  // Values wrapped in literal quotes are parsed correctly even with spaces
+  const hashParams = [
+    'config.prejoinPageEnabled=false',
+    'config.startWithVideoMuted=true',
+    `userInfo.displayName=${encodeURIComponent(`"${displayName}"`)}`,
+  ].join('&')
+
+  callUrl.value = `https://${JITSI_DOMAIN}/${roomName}#${hashParams}`
+  window.open(callUrl.value, 'chitchat-call', 'width=1280,height=800')
+  callActive.value = true
+}
+
+function endCall(): void {
+  callActive.value = false
+}
+
+async function handleDeleteRoom(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || !isSelectedRoomOwner.value) return
+
+  isManagingMembers.value = true
+  try {
+    await deleteRoom(room.id)
+    showMembersDialog.value = false
+
+    // If we were viewing that channel, fall back to General
+    if (chatStore.currentRoomId === room.id) {
+      await activateRoom(DEFAULT_ROOM_ID)
+    }
+  } catch (err) {
+    error.value = `Failed to delete channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Delete failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+
+function processIncomingMessages(messages: Message[]): void {
+  if (!validateSession()) {
+    handleSessionExpiredWithToast()
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastSubscriptionUpdateTime < SUBSCRIPTION_DEBOUNCE_MS) {
+    console.log('[Chat] Subscription update debounced - too frequent')
+    return
+  }
+  lastSubscriptionUpdateTime = now
+
+  const currentIds = new Set(messages.map(m => m.id))
+  
+  if (currentIds.size === lastProcessedMessageIds.size && 
+      [...currentIds].every(id => lastProcessedMessageIds.has(id))) {
+    console.log('[Chat] Message IDs unchanged, skipping duplicate update')
+    return
+  }
+  
+  lastProcessedMessageIds = currentIds
+  
+  const newMessages = messages.filter(newMsg => 
+    !chatStore.messages.some(currentMsg => currentMsg.id === newMsg.id)
+  )
+
+  if (chatStore.notificationsEnabled && newMessages.length > 0) {
+    console.log(`[Chat] Found ${newMessages.length} new messages to notify, page visible: ${isPageVisible.value}`)
+    
+    let shouldPlaySound = false
+    
+    newMessages.forEach((message) => {
+      if (!notifiedMessageIds.has(message.id) && message.userId !== authStore.user?.id) {
+        console.log('[Chat] Sending notification for message:', message.id, 'from:', message.username)
+        
+        notifiedMessageIds.add(message.id)
+        
+        shouldPlaySound = true
+        
+        let isMentioned = false
+        try {
+          const mentions = extractMentions(message.content)
+          const currentUsername = authStore.user?.username?.toLowerCase() || ''
+          isMentioned = mentions.some(m => 
+            m.toLowerCase() === currentUsername || m.toLowerCase() === 'all'
+          )
+        } catch (err) {
+          console.warn('[Chat] Error checking mentions:', err)
+        }
+        
+        if (isPageVisible.value) {
+          console.log('[Chat] Page visible - displaying notification for:', message.username, 'mentioned:', isMentioned)
+          
+          const { toastData } = isMentioned 
+            ? notifyMentioned(message, authStore.user?.id || '', isPageVisible.value)
+            : notifyNewMessage(message, authStore.user?.id || '', isPageVisible.value)
+          
+          if (toastData) {
+            toastMessage.value = toastData.content.substring(0, 100) + (toastData.content.length > 100 ? '...' : '')
+            toastAnimal.value = toastData.animal
+            toastUsername.value = toastData.username
+            showNewMessageToast.value = true
+          }
+        } else {
+          console.log('[Chat] Page hidden - using Service Worker for device notification for:', message.username, 'mentioned:', isMentioned)
+          
+          if (navigator.serviceWorker?.controller) {
+            const notificationTitle = isMentioned 
+              ? `🔔 ${message.animal} ${message.username} mentioned you`
+              : `💬 ${message.animal} ${message.username}`
+            
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SHOW_NOTIFICATION',
+              data: {
+                title: notificationTitle,
+                body: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+                icon: '/vite.svg',
+                badge: '/notification-badge.png',
+                tag: `message-${message.id}`,
+                requireInteraction: true,
+                messageId: message.id,
+                userId: authStore.user?.id || '',
+              },
+            })
+            console.log('[Chat] Notification sent to Service Worker')
+          } else {
+            console.warn('[Chat] Service Worker not available, notification may not appear')
+          }
+        }
+        
+        console.log('[Chat] Notification complete for message:', message.id)
+      }
+    })
+    
+    if (shouldPlaySound) {
+      console.log('[Chat] Triggering sound notification (once for batch)...')
+      playNotificationSoundDouble()
+    }
+  } else {
+    if (!chatStore.notificationsEnabled) {
+      console.log('[Chat] Notifications disabled, skipping notification')
+    } else {
+      console.log('[Chat] No new messages to notify')
+    }
+  }
+  
+  chatStore.syncMessages(messages)
+  console.log('[Chat] Messages synced:', messages.length)
+  
+  if (CHECK_FILE_ON_NEW_MESSAGE) {
+    performFileCleanup(messages).catch(err => {
+      console.error('⚠️ File cleanup error during message update (non-critical):', err)
+    })
+  }
+  
+  if (isPrepending || lastAction === 'prepend') {
+    console.log('[Chat] Prepend in progress or just finished, skipping auto-scroll', {
+      isPrepending,
+      lastAction
+    })
+    setAction('idle')
+    return
+  }
+  
+  if (now < prependLockUntil) {
+    const timeRemaining = prependLockUntil - now
+    console.log(`[Chat] Blocked by prepend lock window (${timeRemaining}ms remaining)`)
+    return
+  }
+  
+  const container = messagesContainer.value
+  if (!container) return
+  
+  const pixelThresholdExceeded = Math.abs(container.scrollTop - lastKnownScrollTop) > USER_SCROLL_THRESHOLD
+  const recentUserScroll = (Date.now() - lastUserScrollTime) < USER_SCROLL_TIME_WINDOW
+  const userScrolledManually = pixelThresholdExceeded || recentUserScroll
+  
+  if (userScrolledManually) {
+    console.log('[Chat] User actively scrolling, skip auto-scroll', {
+      pixelThreshold: pixelThresholdExceeded,
+      recentScroll: recentUserScroll,
+      currentScrollTop: container.scrollTop,
+      lastKnownScrollTop,
+      delta: container.scrollTop - lastKnownScrollTop
+    })
+    lastKnownScrollTop = container.scrollTop
+    return
+  }
+  
+  const nearBottom = isUserNearBottom()
+  
+  if (shouldForceScroll || nearBottom) {
+    console.log('[Chat] Auto-scrolling to latest message', {
+      force: shouldForceScroll,
+      nearBottom
+    })
+    nextTick(() => {
+      scrollToBottom()
+    })
+    shouldForceScroll = false
+    setAction('idle')
+  } else {
+    console.log('[Chat] User scrolling up (reading older messages), NOT auto-scrolling')
+    setAction('idle')
+  }
+}
+
 onMounted(async () => {
   try {
     if ('scrollRestoration' in history) {
@@ -2265,31 +3013,28 @@ onMounted(async () => {
       }
     }
 
-    const initialMessages = await getMessages()
-    chatStore.setMessages(initialMessages)
-    
-    lastProcessedMessageIds = new Set(initialMessages.map(m => m.id))
-    
-    notifiedMessageIds = new Set(initialMessages.map(m => m.id))
-    
+    // One-time migration: legacy messages without roomId belong to General
     try {
-      if (AUTO_CLEANUP_ON_MOUNT) {
-        console.log('🔄 Performing initial file availability check...')
-        const cleanupResult = await performFileCleanup(initialMessages)
-        console.log('✅ File cleanup completed:', cleanupResult)
-      }
+      await backfillLegacyMessageRooms()
     } catch (err) {
-      console.error('⚠️ File cleanup error (non-critical):', err)
+      console.error('⚠️ Room backfill error (non-critical):', err)
     }
-    
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, SCROLL_DELAY))
-    scrollToBottom()
-    
-    setAction('init')
-    
-    if (messagesContainer.value) {
-      lastKnownScrollTop = messagesContainer.value.scrollTop
+
+    // Restore last opened room (falls back to General)
+    let savedRoomId: string | null = null
+    try {
+      savedRoomId = localStorage.getItem(CURRENT_ROOM_STORAGE_KEY)
+    } catch { /* storage unavailable - ignore */ }
+    chatStore.setCurrentRoom(savedRoomId || DEFAULT_ROOM_ID)
+
+    await startChatSubscriptions(chatStore.currentRoomId)
+
+    // Live channels list (public + private channels I'm a member of)
+    if (authStore.user) {
+      unsubscribeRooms = subscribeToRooms(authStore.user.id, (rooms) => {
+        chatStore.setRooms(rooms)
+        console.log('[Channels] Channels updated:', rooms.length)
+      })
     }
 
     if (isNotificationSupported()) {
@@ -2334,198 +3079,6 @@ onMounted(async () => {
     document.addEventListener('dragleave', handleGlobalDragLeave as any)
     document.addEventListener('drop', handleGlobalDrop as any)
 
-    const unsubscribe = subscribeToMessages((messages) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      const now = Date.now()
-      if (now - lastSubscriptionUpdateTime < SUBSCRIPTION_DEBOUNCE_MS) {
-        console.log('[Chat] Subscription update debounced - too frequent')
-        return
-      }
-      lastSubscriptionUpdateTime = now
-
-      const currentIds = new Set(messages.map(m => m.id))
-      
-      if (currentIds.size === lastProcessedMessageIds.size && 
-          [...currentIds].every(id => lastProcessedMessageIds.has(id))) {
-        console.log('[Chat] Message IDs unchanged, skipping duplicate update')
-        return
-      }
-      
-      lastProcessedMessageIds = currentIds
-      
-      const newMessages = messages.filter(newMsg => 
-        !chatStore.messages.some(currentMsg => currentMsg.id === newMsg.id)
-      )
-
-      if (chatStore.notificationsEnabled && newMessages.length > 0) {
-        console.log(`[Chat] Found ${newMessages.length} new messages to notify, page visible: ${isPageVisible.value}`)
-        
-        let shouldPlaySound = false
-        
-        newMessages.forEach((message) => {
-          if (!notifiedMessageIds.has(message.id) && message.userId !== authStore.user?.id) {
-            console.log('[Chat] Sending notification for message:', message.id, 'from:', message.username)
-            
-            notifiedMessageIds.add(message.id)
-            
-            shouldPlaySound = true
-            
-            let isMentioned = false
-            try {
-              const mentions = extractMentions(message.content)
-              const currentUsername = authStore.user?.username?.toLowerCase() || ''
-              isMentioned = mentions.some(m => 
-                m.toLowerCase() === currentUsername || m.toLowerCase() === 'all'
-              )
-            } catch (err) {
-              console.warn('[Chat] Error checking mentions:', err)
-            }
-            
-            if (isPageVisible.value) {
-              console.log('[Chat] Page visible - displaying notification for:', message.username, 'mentioned:', isMentioned)
-              
-              const { toastData } = isMentioned 
-                ? notifyMentioned(message, authStore.user?.id || '', isPageVisible.value)
-                : notifyNewMessage(message, authStore.user?.id || '', isPageVisible.value)
-              
-              if (toastData) {
-                toastMessage.value = toastData.content.substring(0, 100) + (toastData.content.length > 100 ? '...' : '')
-                toastAnimal.value = toastData.animal
-                toastUsername.value = toastData.username
-                showNewMessageToast.value = true
-              }
-            } else {
-              console.log('[Chat] Page hidden - using Service Worker for device notification for:', message.username, 'mentioned:', isMentioned)
-              
-              if (navigator.serviceWorker?.controller) {
-                const notificationTitle = isMentioned 
-                  ? `🔔 ${message.animal} ${message.username} mentioned you`
-                  : `💬 ${message.animal} ${message.username}`
-                
-                navigator.serviceWorker.controller.postMessage({
-                  type: 'SHOW_NOTIFICATION',
-                  data: {
-                    title: notificationTitle,
-                    body: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
-                    icon: '/vite.svg',
-                    badge: '/notification-badge.png',
-                    tag: `message-${message.id}`,
-                    requireInteraction: true,
-                    messageId: message.id,
-                    userId: authStore.user?.id || '',
-                  },
-                })
-                console.log('[Chat] Notification sent to Service Worker')
-              } else {
-                console.warn('[Chat] Service Worker not available, notification may not appear')
-              }
-            }
-            
-            console.log('[Chat] Notification complete for message:', message.id)
-          }
-        })
-        
-        if (shouldPlaySound) {
-          console.log('[Chat] Triggering sound notification (once for batch)...')
-          playNotificationSoundDouble()
-        }
-      } else {
-        if (!chatStore.notificationsEnabled) {
-          console.log('[Chat] Notifications disabled, skipping notification')
-        } else {
-          console.log('[Chat] No new messages to notify')
-        }
-      }
-      
-      chatStore.syncMessages(messages)
-      console.log('[Chat] Messages synced:', messages.length)
-      
-      if (CHECK_FILE_ON_NEW_MESSAGE) {
-        performFileCleanup(messages).catch(err => {
-          console.error('⚠️ File cleanup error during message update (non-critical):', err)
-        })
-      }
-      
-      if (isPrepending || lastAction === 'prepend') {
-        console.log('[Chat] Prepend in progress or just finished, skipping auto-scroll', {
-          isPrepending,
-          lastAction
-        })
-        setAction('idle')
-        return
-      }
-      
-      if (now < prependLockUntil) {
-        const timeRemaining = prependLockUntil - now
-        console.log(`[Chat] Blocked by prepend lock window (${timeRemaining}ms remaining)`)
-        return
-      }
-      
-      const container = messagesContainer.value
-      if (!container) return
-      
-      const pixelThresholdExceeded = Math.abs(container.scrollTop - lastKnownScrollTop) > USER_SCROLL_THRESHOLD
-      const recentUserScroll = (Date.now() - lastUserScrollTime) < USER_SCROLL_TIME_WINDOW
-      const userScrolledManually = pixelThresholdExceeded || recentUserScroll
-      
-      if (userScrolledManually) {
-        console.log('[Chat] User actively scrolling, skip auto-scroll', {
-          pixelThreshold: pixelThresholdExceeded,
-          recentScroll: recentUserScroll,
-          currentScrollTop: container.scrollTop,
-          lastKnownScrollTop,
-          delta: container.scrollTop - lastKnownScrollTop
-        })
-        lastKnownScrollTop = container.scrollTop
-        return
-      }
-      
-      const nearBottom = isUserNearBottom()
-      
-      if (shouldForceScroll || nearBottom) {
-        console.log('[Chat] Auto-scrolling to latest message', {
-          force: shouldForceScroll,
-          nearBottom
-        })
-        nextTick(() => {
-          scrollToBottom()
-        })
-        shouldForceScroll = false
-        setAction('idle')
-      } else {
-        console.log('[Chat] User scrolling up (reading older messages), NOT auto-scrolling')
-        setAction('idle')
-      }
-    })
-
-    chatStore.setUnsubscribe(unsubscribe)
-
-    const unsubscribeUsers = subscribeToUsers((users) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      chatStore.setUsers(users)
-    })
-
-    chatStore.setUnsubscribeUsers(unsubscribeUsers)
-
-    const unsubscribeMessageCount = subscribeToMessageCount((count) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      chatStore.setMessageCount(count)
-      console.log('[Chat] Total message count updated:', count)
-    })
-
-    chatStore.setUnsubscribeMessageCount(unsubscribeMessageCount)
     
     stopPeriodicCleanup = schedulePeriodicCleanup(
       () => chatStore.messages,
@@ -2539,7 +3092,12 @@ onMounted(async () => {
 
 onUnmounted(() => {
   chatStore.unsubscribeFromUpdates()
-  
+
+  if (unsubscribeRooms) {
+    unsubscribeRooms()
+    unsubscribeRooms = null
+  }
+
   if (stopPeriodicCleanup) {
     stopPeriodicCleanup()
     stopPeriodicCleanup = null
@@ -2712,6 +3270,26 @@ onUnmounted(() => {
   gap: 0.75rem;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+
+/* Room / Group Selector */
+.room-selector {
+  align-self: flex-start;
+  text-transform: none !important;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  max-width: 240px;
+}
+
+.room-selector-name {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-menu-card {
+  overflow-y: auto;
 }
 
 .stat-item-badge {
@@ -3641,14 +4219,14 @@ onUnmounted(() => {
 }
 
 .input-section {
-  padding: 0.75rem 1rem 1rem;
+  padding: 0.4rem 0.75rem 0.6rem;
   background-color: var(--bg-primary);
   border-top: 2px solid var(--border-accent);
   border-radius: 16px 16px 0 0;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
   transition: background 0.3s, color 0.3s;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
@@ -3703,6 +4281,7 @@ onUnmounted(() => {
 
 .message-input-wrapper {
   flex: 1;
+  position: relative;
   border: 2px solid var(--clr-primary-a20);
   border-radius: 20px;
   background: var(--bg-tertiary);
@@ -5003,5 +5582,590 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============================================================
+   DISCORD-STYLE LAYOUT
+   ============================================================ */
+.chat-container {
+  flex-direction: row !important;
+  padding: 0;
+}
+
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+}
+
+/* ---------- Sidebar ---------- */
+.channel-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #2b2d31;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  height: 100vh;
+  z-index: 1001;
+}
+
+.sidebar-server-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  font-weight: 700;
+}
+
+.server-name {
+  color: #f2f3f5;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+.server-chevron {
+  color: #949ba4;
+}
+
+.channel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.channel-category {
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 8px 8px 4px;
+}
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #949ba4;
+  font-size: 15px;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.channel-item:hover {
+  background: rgba(78, 80, 88, 0.4);
+  color: #dbdee1;
+}
+
+.channel-item.active {
+  background: rgba(88, 101, 242, 0.25);
+  color: #f2f3f5;
+}
+
+.channel-hash {
+  font-size: 19px;
+  font-weight: 400;
+  opacity: 0.75;
+  line-height: 1;
+}
+
+.channel-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-gear {
+  display: none;
+  color: #949ba4;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.channel-gear:hover {
+  color: #dbdee1;
+}
+
+.channel-item:hover .channel-gear,
+.channel-item.active .channel-gear {
+  display: inline-flex;
+}
+
+.add-channel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #949ba4;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.add-channel-btn:hover {
+  background: rgba(78, 80, 88, 0.4);
+  color: #23a55a;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #232428;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.footer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.footer-username {
+  color: #f2f3f5;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.footer-btn {
+  color: #b5bac1 !important;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+}
+
+.sidebar-hamburger {
+  display: none;
+  color: #b5bac1 !important;
+}
+
+/* ---------- Channel header ---------- */
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 16px;
+  background: #313338;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+  box-shadow: none !important;
+}
+
+.channel-title {
+  color: #f2f3f5;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-stats-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.flex-spacer {
+  flex: 1;
+}
+
+.channel-header .search-field {
+  width: 240px;
+}
+
+.header-icon-btn {
+  color: #b5bac1 !important;
+  flex-shrink: 0;
+}
+
+/* Inline emoji button inside the message input box */
+.emoji-inline-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #949ba4;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.emoji-inline-btn:hover:not(:disabled) {
+  color: #dbdee1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.emoji-inline-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.message-input :deep(textarea) {
+  padding-right: 42px !important;
+}
+
+.call-btn:hover {
+  color: #23a55a !important;
+}
+
+/* ---------- Call banner ---------- */
+.call-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(35, 165, 90, 0.12);
+  border-bottom: 1px solid rgba(35, 165, 90, 0.3);
+  flex-shrink: 0;
+}
+
+.call-banner-text {
+  color: #23a55a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.call-banner-rejoin {
+  color: #5865f2;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.call-banner-rejoin:hover {
+  text-decoration: underline;
+}
+
+.chat-container.light-mode .call-banner-text,
+.chat-container.light-mode .call-banner-rejoin {
+  color: #1a7f47;
+}
+
+/* ---------- Channel dialogs ---------- */
+.member-select-list,
+.member-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.visibility-toggle {
+  border-radius: 8px;
+}
+
+.chat-container.light-mode .header-icon-btn {
+  color: #4e5058 !important;
+}
+
+/* ---------- Messages (Discord flat style) ---------- */
+.message-wrapper {
+  position: relative;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 6px 48px 6px 16px;
+  position: relative;
+  transition: background 0.1s;
+}
+
+.message-row:hover {
+  background: rgba(78, 80, 88, 0.2);
+}
+
+/* Own messages: mirrored to the right (avatar right, content hugs right) */
+.message-row.own-message {
+  flex-direction: row-reverse;
+  background: rgba(88, 101, 242, 0.1);
+}
+
+.message-row.own-message:hover {
+  background: rgba(88, 101, 242, 0.16);
+}
+
+.message-row.own-message .row-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.message-row.own-message .row-head {
+  flex-direction: row-reverse;
+}
+
+.message-row.own-message .action-buttons {
+  right: auto;
+  left: 24px;
+}
+
+.row-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-top: 2px;
+  user-select: none;
+}
+
+.row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-author {
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.row-ts {
+  color: #949ba4;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.row-body .message-content {
+  color: #dbdee1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.row-body .message-deleted-text {
+  color: #949ba4;
+  font-style: italic;
+}
+
+/* Hover actions — Discord style floating toolbar */
+.message-row .action-buttons {
+  position: absolute;
+  top: -14px;
+  right: 24px;
+  background: #313338;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  padding: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 5;
+}
+
+.message-row:hover .action-buttons {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Light mode palette */
+.chat-container.light-mode {
+  --bg-primary: #ffffff;
+}
+
+.chat-container.light-mode .channel-sidebar {
+  background: #f2f3f5;
+  border-right-color: #e3e5e8;
+}
+
+.chat-container.light-mode .sidebar-server-header {
+  border-bottom-color: #e3e5e8;
+}
+
+.chat-container.light-mode .server-name,
+.chat-container.light-mode .footer-username {
+  color: #060607;
+}
+
+.chat-container.light-mode .channel-item {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .channel-item:hover {
+  background: rgba(6, 6, 7, 0.06);
+  color: #060607;
+}
+
+.chat-container.light-mode .channel-item.active {
+  background: rgba(88, 101, 242, 0.15);
+  color: #060607;
+}
+
+.chat-container.light-mode .add-channel-btn {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .sidebar-footer {
+  background: #ebedef;
+}
+
+.chat-container.light-mode .footer-btn {
+  color: #4e5058 !important;
+}
+
+.chat-container.light-mode .channel-header {
+  background: #ffffff;
+  border-bottom-color: #e3e5e8;
+}
+
+.chat-container.light-mode .channel-title {
+  color: #060607;
+}
+
+.chat-container.light-mode .stat-pill {
+  background: rgba(0, 0, 0, 0.05);
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .message-row:hover {
+  background: rgba(6, 6, 7, 0.04);
+}
+
+.chat-container.light-mode .message-row.own-message {
+  background: rgba(88, 101, 242, 0.08);
+}
+
+.chat-container.light-mode .message-row.own-message:hover {
+  background: rgba(88, 101, 242, 0.13);
+}
+
+.chat-container.light-mode .row-body .message-content {
+  color: #2e3338;
+}
+
+.chat-container.light-mode .row-ts {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .message-row .action-buttons {
+  background: #ffffff;
+  border-color: #e3e5e8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.chat-container.light-mode .emoji-inline-btn {
+  color: #5c5e66;
+}
+
+.chat-container.light-mode .emoji-inline-btn:hover:not(:disabled) {
+  color: #060607;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 900px) {
+  .channel-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .channel-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-hamburger {
+    display: inline-flex;
+  }
+
+  .header-search :deep(.search-field) {
+    width: 150px;
+  }
+
+  .header-stats-mini {
+    display: none;
+  }
+
+  .message-row {
+    padding: 6px 16px 6px 12px;
+    gap: 10px;
+  }
+
+  .row-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
 }
 </style>
