@@ -12,10 +12,12 @@ import {
   deleteDoc,
   updateDoc,
   startAfter,
+  arrayUnion,
+  DocumentReference,
   DocumentSnapshot,
 } from 'firebase/firestore'
-import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE, MESSAGE_EXPIRATION_TIME } from '@/utils/const'
-import type { User, Message, ReplyTo } from '@/types'
+import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE, MESSAGE_EXPIRATION_TIME, DEFAULT_ROOM_ID } from '@/utils/const'
+import type { User, Message, ReplyTo, ChatRoom, MemberInfo } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { getRandomAnimal } from '@/utils/animals'
 
@@ -202,10 +204,12 @@ export async function sendMessage(
     latitude: number
     longitude: number
     label?: string
-  }
+  },
+  roomId?: string
 ): Promise<Message> {
   const newMessage: Message = {
     id: uuidv4(),
+    roomId: roomId || DEFAULT_ROOM_ID,
     userId,
     username,
     animal,
@@ -313,10 +317,11 @@ export async function unpinMessage(messageId: string): Promise<void> {
   }
 }
 
-export async function getMessages(): Promise<Message[]> {
+export async function getMessages(roomId: string = DEFAULT_ROOM_ID): Promise<Message[]> {
   try {
     const q = query(
       collection(db, 'messages'),
+      where('roomId', '==', roomId),
       orderBy('timestamp', 'desc'),
       limit(MESSAGES_PER_PAGE)
     )
@@ -332,13 +337,15 @@ export async function getMessages(): Promise<Message[]> {
 /**
  * Get previous messages for pagination (load older messages when scrolling up)
  * @param beforeCursor - The oldest message to load messages before
+ * @param roomId - Room to load messages from
  * @returns Array of messages (oldest to newest chronological order)
  */
-export async function getMessagesBefore(beforeCursor: Message): Promise<Message[]> {
+export async function getMessagesBefore(beforeCursor: Message, roomId: string = DEFAULT_ROOM_ID): Promise<Message[]> {
   try {
     // Get the document snapshot for cursor-based pagination
     const cursorQuery = query(
       collection(db, 'messages'),
+      where('roomId', '==', roomId),
       where('timestamp', '==', beforeCursor.timestamp)
     )
     const cursorSnapshot = await getDocs(cursorQuery)
@@ -361,6 +368,7 @@ export async function getMessagesBefore(beforeCursor: Message): Promise<Message[
     // Query for messages before cursor (older messages)
     const q = query(
       collection(db, 'messages'),
+      where('roomId', '==', roomId),
       orderBy('timestamp', 'desc'),
       startAfter(cursorDoc),
       limit(MESSAGES_PER_PAGE)
@@ -374,10 +382,11 @@ export async function getMessagesBefore(beforeCursor: Message): Promise<Message[
   }
 }
 
-export function subscribeToMessages(callback: (messages: Message[]) => void): () => void {
+export function subscribeToMessages(callback: (messages: Message[]) => void, roomId: string = DEFAULT_ROOM_ID): () => void {
   try {
     const q = query(
       collection(db, COLLECTIONS.MESSAGES),
+      where('roomId', '==', roomId),
       orderBy('timestamp', 'desc'),
       limit(MESSAGES_PER_PAGE)
     )
@@ -395,10 +404,13 @@ export function subscribeToMessages(callback: (messages: Message[]) => void): ()
   }
 }
 
-// Subscribe to total message count (real-time)
-export function subscribeToMessageCount(callback: (count: number) => void): () => void {
+// Subscribe to total message count (real-time), scoped to a room
+export function subscribeToMessageCount(callback: (count: number) => void, roomId?: string): () => void {
   try {
-    const q = query(collection(db, COLLECTIONS.MESSAGES))
+    const baseQuery = collection(db, COLLECTIONS.MESSAGES)
+    const q = roomId
+      ? query(baseQuery, where('roomId', '==', roomId))
+      : query(baseQuery)
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       callback(querySnapshot.size)
@@ -572,4 +584,172 @@ export async function isFileUsedByPinnedMessage(fileUrl: string): Promise<boolea
     console.error('Error checking pinned message file:', error)
     return false
   }
+}
+
+// ============================================================================
+// ROOMS & GROUPS COLLECTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Create a new channel
+ */
+export async function createRoom(
+  name: string,
+  creator: MemberInfo
+): Promise<ChatRoom> {
+  const trimmedName = name.trim()
+  if (!trimmedName) {
+    throw new Error('Channel name cannot be empty')
+  }
+
+  const newRoom: ChatRoom = {
+    id: uuidv4(),
+    name: trimmedName,
+    type: 'room',
+    createdBy: creator.id,
+    createdByName: creator.username,
+    members: [creator.id],
+    memberDetails: [creator],
+    createdAt: Date.now(),
+  }
+
+  try {
+    await addDoc(collection(db, COLLECTIONS.ROOMS), newRoom)
+    console.log('[Channels] Created channel:', newRoom.name)
+    return newRoom
+  } catch (error) {
+    console.error('Error creating channel:', error)
+    throw error
+  }
+}
+
+/**
+ * Get a single room by its id
+ */
+export async function getRoomById(roomId: string): Promise<ChatRoom | null> {
+  try {
+    const q = query(collection(db, COLLECTIONS.ROOMS), where('id', '==', roomId))
+    const querySnapshot = await getDocs(q)
+
+    if (querySnapshot.empty) {
+      return null
+    }
+
+    return querySnapshot.docs[0].data() as ChatRoom
+  } catch (error) {
+    console.error('Error getting room by ID:', error)
+    throw error
+  }
+}
+
+/**
+ * Subscribe to all channels, sorted oldest first.
+ */
+export function subscribeToRooms(callback: (rooms: ChatRoom[]) => void): () => void {
+  try {
+    const q = query(collection(db, COLLECTIONS.ROOMS))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const rooms = snapshot.docs
+        .map((doc) => doc.data() as ChatRoom)
+        .sort((a, b) => a.createdAt - b.createdAt)
+      callback(rooms)
+    }, (error) => console.error('[Channels] Listener error:', error))
+
+    return unsubscribe
+  } catch (error) {
+    console.error('Error subscribing to rooms:', error)
+    throw error
+  }
+}
+
+/**
+ * Track membership when opening a channel.
+ */
+export async function joinRoom(roomId: string, user: MemberInfo): Promise<void> {
+  try {
+    const room = await getRoomDocRef(roomId)
+
+    const alreadyMember = room.data.members?.includes(user.id)
+    if (!alreadyMember) {
+      await updateDoc(room.ref, {
+        members: arrayUnion(user.id),
+        memberDetails: arrayUnion(user),
+      })
+    }
+    console.log(`[Rooms] ${user.username} joined room:`, room.data.name)
+  } catch (error) {
+    console.error('Error joining room:', error)
+    throw error
+  }
+}
+
+/**
+ * Delete a channel and all of its messages.
+ */
+export async function deleteRoom(roomId: string): Promise<void> {
+  try {
+    const room = await getRoomDocRef(roomId)
+
+    // Delete the room's messages first
+    const messagesQuery = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where('roomId', '==', roomId)
+    )
+    const messagesSnapshot = await getDocs(messagesQuery)
+
+    for (const msgDoc of messagesSnapshot.docs) {
+      await deleteDoc(msgDoc.ref)
+    }
+
+    // Delete the room document itself
+    await deleteDoc(room.ref)
+    console.log(`[Channels] Deleted channel and ${messagesSnapshot.size} message(s):`, room.data.name)
+  } catch (error) {
+    console.error('Error deleting room:', error)
+    throw error
+  }
+}
+
+/**
+ * One-time migration: assign legacy messages (without roomId) to the default room.
+ * Runs once per browser (guarded by a localStorage flag).
+ */
+const ROOM_BACKFILL_KEY = 'room_backfill_v1'
+
+export async function backfillLegacyMessageRooms(): Promise<void> {
+  try {
+    if (typeof localStorage === 'undefined' || localStorage.getItem(ROOM_BACKFILL_KEY)) {
+      return
+    }
+
+    console.log(`[Rooms] Backfilling legacy messages into "${DEFAULT_ROOM_ID}"...`)
+    const snapshot = await getDocs(collection(db, COLLECTIONS.MESSAGES))
+
+    let updated = 0
+    for (const docSnap of snapshot.docs) {
+      if (!docSnap.data().roomId) {
+        await updateDoc(docSnap.ref, { roomId: DEFAULT_ROOM_ID })
+        updated++
+      }
+    }
+
+    localStorage.setItem(ROOM_BACKFILL_KEY, String(Date.now()))
+    console.log(`[Rooms] Backfill complete: ${updated} message(s) assigned to "${DEFAULT_ROOM_ID}"`)
+  } catch (error) {
+    console.error('[Rooms] Backfill error (non-critical):', error)
+  }
+}
+
+/** Internal helper: find the Firestore doc for a room by its id field */
+async function getRoomDocRef(roomId: string): Promise<{ ref: DocumentReference; data: ChatRoom }> {
+  const q = query(collection(db, COLLECTIONS.ROOMS), where('id', '==', roomId))
+  const querySnapshot = await getDocs(q)
+
+  if (querySnapshot.empty) {
+    throw new Error(`Room with id "${roomId}" not found`)
+  }
+
+  const doc = querySnapshot.docs[0]
+  return { ref: doc.ref, data: doc.data() as ChatRoom }
 }

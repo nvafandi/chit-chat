@@ -22,6 +22,56 @@
             </div>
           <div class="header-info">
             <h1 class="app-title">CHIT CHuT</h1>
+
+            <!-- Channel Selector -->
+            <v-menu location="bottom" transition="slide-y-transition">
+              <template v-slot:activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  size="small"
+                  variant="tonal"
+                  color="white"
+                  class="room-selector mt-1"
+                  data-testid="room-selector"
+                >
+                  <v-icon size="small" class="mr-1">mdi-pound</v-icon>
+                  <span class="room-selector-name">{{ currentRoomName }}</span>
+                  <v-icon size="x-small" class="ml-1">mdi-menu-down</v-icon>
+                </v-btn>
+              </template>
+              <v-card class="room-menu-card" min-width="300" max-height="440">
+                <v-list density="compact" nav class="py-1">
+                  <v-list-subheader class="text-caption font-weight-bold">CHANNELS</v-list-subheader>
+                  <v-list-item
+                    v-for="room in channels"
+                    :key="room.id"
+                    :active="room.id === chatStore.currentRoomId"
+                    :title="room.name"
+                    prepend-icon="mdi-pound"
+                    @click="handleRoomClick(room)"
+                  >
+                    <template v-slot:append>
+                      <v-btn
+                        icon
+                        size="x-small"
+                        variant="text"
+                        @click.stop="openMembersDialog(room)"
+                        title="Channel info"
+                      >
+                        <v-icon size="small">mdi-cog-outline</v-icon>
+                      </v-btn>
+                    </template>
+                  </v-list-item>
+                  <v-divider class="my-1" />
+                  <v-list-item
+                    title="New Channel"
+                    prepend-icon="mdi-chat-plus-outline"
+                    @click="openCreateDialog()"
+                  />
+                </v-list>
+              </v-card>
+            </v-menu>
+
             <div class="header-stats">
               <div class="stat-item-badge messages-count">
                 <v-icon size="small" class="stat-icon">mdi-message</v-icon>
@@ -627,6 +677,85 @@
       @select="handleSelectSticker"
     />
 
+    <!-- Create Channel Dialog -->
+    <v-dialog
+      v-model="showCreateRoomDialog"
+      max-width="420"
+      persistent
+    >
+      <v-card>
+        <v-card-title class="text-h6">Create Channel</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="newRoomName"
+            label="Channel name"
+            variant="outlined"
+            density="compact"
+            counter="30"
+            maxlength="30"
+            hide-details="auto"
+            autofocus
+            @keyup.enter="handleCreateRoom"
+          />
+          <p class="text-caption text-grey mt-3 mb-0">
+            Channels are visible to everyone and users join them automatically when opened.
+          </p>
+        </v-card-text>
+        <v-card-actions class="justify-end gap-2">
+          <v-btn variant="tonal" @click="showCreateRoomDialog = false" :disabled="creatingRoom">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="elevated"
+            :loading="creatingRoom"
+            :disabled="!newRoomName.trim()"
+            @click="handleCreateRoom"
+          >
+            Create
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Channel Info Dialog -->
+    <v-dialog
+      v-model="showMembersDialog"
+      max-width="420"
+    >
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon size="small" class="mr-2">mdi-pound</v-icon>
+          {{ selectedRoom?.name || 'Channel' }}
+        </v-card-title>
+        <v-card-text v-if="selectedRoom">
+          <p class="text-caption text-grey mb-2">
+            Created by {{ selectedRoom.createdByName }} · {{ selectedRoom.memberDetails.length }} member(s)
+          </p>
+
+          <v-list density="compact" class="py-0">
+            <v-list-item
+              v-for="member in selectedRoom.memberDetails"
+              :key="member.id"
+              :title="`${member.animal ?? ''} ${member.username}`"
+              :subtitle="member.id === selectedRoom.createdBy ? 'Owner' : undefined"
+            />
+          </v-list>
+        </v-card-text>
+        <v-card-actions class="justify-end gap-2">
+          <v-btn
+            v-if="isSelectedRoomOwner"
+            color="error"
+            variant="tonal"
+            prepend-icon="mdi-delete-outline"
+            :loading="isManagingMembers"
+            @click="handleDeleteRoom"
+          >
+            Delete channel
+          </v-btn>
+          <v-btn variant="text" @click="showMembersDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Delete Confirmation Dialog -->
     <v-dialog
       v-model="showDeleteDialog"
@@ -727,7 +856,23 @@ import { useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
-import { sendMessage, getMessages, subscribeToMessages, subscribeToUsers, subscribeToMessageCount, getUserById, hideMessage, getMessagesBefore, pinMessage, unpinMessage } from '@/services/firebase'
+import {
+  sendMessage,
+  getMessages,
+  subscribeToMessages,
+  subscribeToUsers,
+  subscribeToMessageCount,
+  getUserById,
+  hideMessage,
+  getMessagesBefore,
+  pinMessage,
+  unpinMessage,
+  createRoom as fbCreateRoom,
+  subscribeToRooms,
+  joinRoom,
+  deleteRoom,
+  backfillLegacyMessageRooms,
+} from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
 import { validateSession } from '@/services/session'
@@ -740,15 +885,18 @@ import {
   playNotificationSoundDouble,
   initAudioContext,
 } from '@/services/notificationService'
-import { 
-  PERIODIC_CLEANUP_INTERVAL, 
-  AUTO_CLEANUP_ON_MOUNT, 
+import {
+  PERIODIC_CLEANUP_INTERVAL,
+  AUTO_CLEANUP_ON_MOUNT,
   CHECK_FILE_ON_NEW_MESSAGE,
   TOAST_TIMEOUT,
   MESSAGE_HIGHLIGHT_DURATION,
   SCROLL_DELAY,
   SCROLL_LOAD_THRESHOLD,
   SCROLL_DEBOUNCE_MS,
+  DEFAULT_ROOM_ID,
+  DEFAULT_ROOM_NAME,
+  MAX_ROOM_NAME_LENGTH,
 } from '@/utils/const'
 import { compressImageMaximum, formatFileSize, isCompressibleImage, validateFileForUpload } from '@/utils/imageCompression'
 import { isCurlRequest, getCurlCopyableText } from '@/utils/curlFormatter'
@@ -765,7 +913,7 @@ import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
 import LocationMessage from '@/components/LocationMessage.vue'
-import type { Message, ReplyTo, User } from '@/types'
+import type { Message, ReplyTo, User, ChatRoom, MemberInfo } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
 
@@ -883,6 +1031,54 @@ const pendingLocation = ref<{
   longitude: number
   label?: string
 } | null>(null)
+
+// ============================================================================
+// CHANNELS STATE
+// ============================================================================
+const CURRENT_ROOM_STORAGE_KEY = 'current_room_id'
+let unsubscribeRooms: (() => void) | null = null
+
+const showCreateRoomDialog = ref(false)
+const newRoomName = ref('')
+const creatingRoom = ref(false)
+
+const showMembersDialog = ref(false)
+const selectedRoomId = ref<string | null>(null)
+const isManagingMembers = ref(false)
+
+/** Fallback entry so General is always available even before channels load */
+const generalRoom: ChatRoom = {
+  id: DEFAULT_ROOM_ID,
+  name: DEFAULT_ROOM_NAME,
+  type: 'room',
+  createdBy: '',
+  createdByName: '',
+  members: [],
+  memberDetails: [],
+  createdAt: 0,
+}
+
+const channels = computed<ChatRoom[]>(() => {
+  const list = [...chatStore.rooms]
+  if (!list.some(r => r.id === DEFAULT_ROOM_ID)) {
+    list.unshift(generalRoom)
+  }
+  return list.sort((a, b) => a.createdAt - b.createdAt)
+})
+
+const currentRoomName = computed<string>(() => {
+  if (chatStore.currentRoomId === DEFAULT_ROOM_ID) return DEFAULT_ROOM_NAME
+  return chatStore.rooms.find(r => r.id === chatStore.currentRoomId)?.name || chatStore.currentRoomId
+})
+
+const selectedRoom = computed<ChatRoom | null>(() => {
+  if (!selectedRoomId.value) return null
+  return chatStore.rooms.find(r => r.id === selectedRoomId.value) ?? null
+})
+
+const isSelectedRoomOwner = computed<boolean>(() => {
+  return !!selectedRoom.value && selectedRoom.value.createdBy === authStore.user?.id
+})
 
 const displayMessages = computed(() => {
   return searchQuery.value.length >= 3 ? searchResults.value : chatStore.messages
@@ -1812,7 +2008,8 @@ async function handleSendMessage() {
       undefined,
       pendingStickerData.value || undefined,
       attachments.length > 0 ? attachments : undefined,
-      pendingLocation.value || undefined
+      pendingLocation.value || undefined,
+      chatStore.currentRoomId
     )
     
     lastSentMessageId = sentMessage.id
@@ -1872,7 +2069,7 @@ async function loadMoreMessages() {
     console.log(`[Chat] Before prepend - height: ${prevScrollHeight}px, top: ${prevScrollTop}px`)
     
     const oldestMessage = chatStore.messages[0]
-    const olderMessages = await getMessagesBefore(oldestMessage)
+    const olderMessages = await getMessagesBefore(oldestMessage, chatStore.currentRoomId)
 
     if (olderMessages.length === 0) {
       hasMoreMessages.value = false
@@ -1970,7 +2167,7 @@ async function loadAllMessagesForSearch() {
       }
       
       const oldestMessage = chatStore.messages[0]
-      const olderMessages = await getMessagesBefore(oldestMessage)
+      const olderMessages = await getMessagesBefore(oldestMessage, chatStore.currentRoomId)
       
       if (olderMessages.length === 0) {
         hasMoreMessages.value = false
@@ -2229,6 +2426,338 @@ async function handleLogout() {
   router.push('/create-account')
 }
 
+// ============================================================================
+// ROOMS & GROUPS LOGIC
+// ============================================================================
+
+/**
+ * Load initial messages for a room and (re)subscribe to its live updates.
+ * Also re-subscribes the global users listener.
+ */
+async function startChatSubscriptions(roomId: string): Promise<void> {
+  // Stop any previous room-scoped subscriptions
+  chatStore.unsubscribeFromUpdates()
+
+  // Reset per-room state
+  chatStore.setMessages([])
+  hasMoreMessages.value = true
+  lastSentMessageId = null
+  lastProcessedMessageIds = new Set()
+  notifiedMessageIds = new Set()
+
+  console.log(`[Rooms] Loading room "${roomId}"...`)
+
+  const initialMessages = await getMessages(roomId)
+  chatStore.setMessages(initialMessages)
+
+  lastProcessedMessageIds = new Set(initialMessages.map(m => m.id))
+  notifiedMessageIds = new Set(initialMessages.map(m => m.id))
+
+  try {
+    if (AUTO_CLEANUP_ON_MOUNT) {
+      console.log('🔄 Performing initial file availability check...')
+      const cleanupResult = await performFileCleanup(initialMessages)
+      console.log('✅ File cleanup completed:', cleanupResult)
+    }
+  } catch (err) {
+    console.error('⚠️ File cleanup error (non-critical):', err)
+  }
+
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, SCROLL_DELAY))
+  scrollToBottom()
+
+  setAction('init')
+
+  if (messagesContainer.value) {
+    lastKnownScrollTop = messagesContainer.value.scrollTop
+  }
+
+  const unsubscribe = subscribeToMessages((messages) => processIncomingMessages(messages), roomId)
+  chatStore.setUnsubscribe(unsubscribe)
+
+  const unsubscribeUsers = subscribeToUsers((users) => {
+    if (!validateSession()) {
+      handleSessionExpiredWithToast()
+      return
+    }
+    chatStore.setUsers(users)
+  })
+  chatStore.setUnsubscribeUsers(unsubscribeUsers)
+
+  const unsubscribeMessageCount = subscribeToMessageCount((count) => {
+    if (!validateSession()) {
+      handleSessionExpiredWithToast()
+      return
+    }
+    chatStore.setMessageCount(count)
+    console.log('[Chat] Message count updated:', count)
+  }, roomId)
+  chatStore.setUnsubscribeMessageCount(unsubscribeMessageCount)
+
+  console.log(`[Rooms] Subscribed to room "${roomId}" (${initialMessages.length} initial messages)`)
+}
+
+/**
+ * Switch the active channel and track membership.
+ */
+async function activateRoom(roomId: string): Promise<void> {
+  if (!authStore.user || roomId === chatStore.currentRoomId) return
+
+  const room = chatStore.rooms.find(r => r.id === roomId)
+
+  // Track membership when opening channels
+  if (room) {
+    joinRoom(room.id, {
+      id: authStore.user.id,
+      username: authStore.user.username,
+      animal: authStore.user.animal,
+    }).catch(err => console.warn('[Channels] Join tracking failed:', err))
+  }
+
+  chatStore.setCurrentRoom(roomId)
+  try {
+    localStorage.setItem(CURRENT_ROOM_STORAGE_KEY, roomId)
+  } catch { /* storage unavailable - ignore */ }
+
+  await startChatSubscriptions(roomId)
+}
+
+function handleRoomClick(room: ChatRoom): void {
+  activateRoom(room.id).catch(err => {
+    error.value = `Failed to open room: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Rooms] Failed to switch room:', err)
+  })
+}
+
+function openCreateDialog(): void {
+  newRoomName.value = ''
+  showCreateRoomDialog.value = true
+}
+
+async function handleCreateRoom(): Promise<void> {
+  const name = newRoomName.value.trim()
+  if (!name || !authStore.user || name.length > MAX_ROOM_NAME_LENGTH) return
+
+  creatingRoom.value = true
+  error.value = null
+
+  try {
+    const creator: MemberInfo = {
+      id: authStore.user.id,
+      username: authStore.user.username,
+      animal: authStore.user.animal,
+    }
+
+    const room = await fbCreateRoom(name, creator)
+
+    showCreateRoomDialog.value = false
+    console.log(`[Channels] Created channel "${room.name}", switching...`)
+
+    await activateRoom(room.id)
+  } catch (err) {
+    error.value = `Failed to create channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Create failed:', err)
+  } finally {
+    creatingRoom.value = false
+  }
+}
+
+function openMembersDialog(room: ChatRoom): void {
+  selectedRoomId.value = room.id
+  showMembersDialog.value = true
+}
+
+async function handleDeleteRoom(): Promise<void> {
+  const room = selectedRoom.value
+  if (!room || !isSelectedRoomOwner.value) return
+
+  isManagingMembers.value = true
+  try {
+    await deleteRoom(room.id)
+    showMembersDialog.value = false
+
+    // If we were viewing that channel, fall back to General
+    if (chatStore.currentRoomId === room.id) {
+      await activateRoom(DEFAULT_ROOM_ID)
+    }
+  } catch (err) {
+    error.value = `Failed to delete channel: ${err instanceof Error ? err.message : 'Unknown error'}`
+    console.error('[Channels] Delete failed:', err)
+  } finally {
+    isManagingMembers.value = false
+  }
+}
+
+
+function processIncomingMessages(messages: Message[]): void {
+  if (!validateSession()) {
+    handleSessionExpiredWithToast()
+    return
+  }
+
+  const now = Date.now()
+  if (now - lastSubscriptionUpdateTime < SUBSCRIPTION_DEBOUNCE_MS) {
+    console.log('[Chat] Subscription update debounced - too frequent')
+    return
+  }
+  lastSubscriptionUpdateTime = now
+
+  const currentIds = new Set(messages.map(m => m.id))
+  
+  if (currentIds.size === lastProcessedMessageIds.size && 
+      [...currentIds].every(id => lastProcessedMessageIds.has(id))) {
+    console.log('[Chat] Message IDs unchanged, skipping duplicate update')
+    return
+  }
+  
+  lastProcessedMessageIds = currentIds
+  
+  const newMessages = messages.filter(newMsg => 
+    !chatStore.messages.some(currentMsg => currentMsg.id === newMsg.id)
+  )
+
+  if (chatStore.notificationsEnabled && newMessages.length > 0) {
+    console.log(`[Chat] Found ${newMessages.length} new messages to notify, page visible: ${isPageVisible.value}`)
+    
+    let shouldPlaySound = false
+    
+    newMessages.forEach((message) => {
+      if (!notifiedMessageIds.has(message.id) && message.userId !== authStore.user?.id) {
+        console.log('[Chat] Sending notification for message:', message.id, 'from:', message.username)
+        
+        notifiedMessageIds.add(message.id)
+        
+        shouldPlaySound = true
+        
+        let isMentioned = false
+        try {
+          const mentions = extractMentions(message.content)
+          const currentUsername = authStore.user?.username?.toLowerCase() || ''
+          isMentioned = mentions.some(m => 
+            m.toLowerCase() === currentUsername || m.toLowerCase() === 'all'
+          )
+        } catch (err) {
+          console.warn('[Chat] Error checking mentions:', err)
+        }
+        
+        if (isPageVisible.value) {
+          console.log('[Chat] Page visible - displaying notification for:', message.username, 'mentioned:', isMentioned)
+          
+          const { toastData } = isMentioned 
+            ? notifyMentioned(message, authStore.user?.id || '', isPageVisible.value)
+            : notifyNewMessage(message, authStore.user?.id || '', isPageVisible.value)
+          
+          if (toastData) {
+            toastMessage.value = toastData.content.substring(0, 100) + (toastData.content.length > 100 ? '...' : '')
+            toastAnimal.value = toastData.animal
+            toastUsername.value = toastData.username
+            showNewMessageToast.value = true
+          }
+        } else {
+          console.log('[Chat] Page hidden - using Service Worker for device notification for:', message.username, 'mentioned:', isMentioned)
+          
+          if (navigator.serviceWorker?.controller) {
+            const notificationTitle = isMentioned 
+              ? `🔔 ${message.animal} ${message.username} mentioned you`
+              : `💬 ${message.animal} ${message.username}`
+            
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SHOW_NOTIFICATION',
+              data: {
+                title: notificationTitle,
+                body: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+                icon: '/vite.svg',
+                badge: '/notification-badge.png',
+                tag: `message-${message.id}`,
+                requireInteraction: true,
+                messageId: message.id,
+                userId: authStore.user?.id || '',
+              },
+            })
+            console.log('[Chat] Notification sent to Service Worker')
+          } else {
+            console.warn('[Chat] Service Worker not available, notification may not appear')
+          }
+        }
+        
+        console.log('[Chat] Notification complete for message:', message.id)
+      }
+    })
+    
+    if (shouldPlaySound) {
+      console.log('[Chat] Triggering sound notification (once for batch)...')
+      playNotificationSoundDouble()
+    }
+  } else {
+    if (!chatStore.notificationsEnabled) {
+      console.log('[Chat] Notifications disabled, skipping notification')
+    } else {
+      console.log('[Chat] No new messages to notify')
+    }
+  }
+  
+  chatStore.syncMessages(messages)
+  console.log('[Chat] Messages synced:', messages.length)
+  
+  if (CHECK_FILE_ON_NEW_MESSAGE) {
+    performFileCleanup(messages).catch(err => {
+      console.error('⚠️ File cleanup error during message update (non-critical):', err)
+    })
+  }
+  
+  if (isPrepending || lastAction === 'prepend') {
+    console.log('[Chat] Prepend in progress or just finished, skipping auto-scroll', {
+      isPrepending,
+      lastAction
+    })
+    setAction('idle')
+    return
+  }
+  
+  if (now < prependLockUntil) {
+    const timeRemaining = prependLockUntil - now
+    console.log(`[Chat] Blocked by prepend lock window (${timeRemaining}ms remaining)`)
+    return
+  }
+  
+  const container = messagesContainer.value
+  if (!container) return
+  
+  const pixelThresholdExceeded = Math.abs(container.scrollTop - lastKnownScrollTop) > USER_SCROLL_THRESHOLD
+  const recentUserScroll = (Date.now() - lastUserScrollTime) < USER_SCROLL_TIME_WINDOW
+  const userScrolledManually = pixelThresholdExceeded || recentUserScroll
+  
+  if (userScrolledManually) {
+    console.log('[Chat] User actively scrolling, skip auto-scroll', {
+      pixelThreshold: pixelThresholdExceeded,
+      recentScroll: recentUserScroll,
+      currentScrollTop: container.scrollTop,
+      lastKnownScrollTop,
+      delta: container.scrollTop - lastKnownScrollTop
+    })
+    lastKnownScrollTop = container.scrollTop
+    return
+  }
+  
+  const nearBottom = isUserNearBottom()
+  
+  if (shouldForceScroll || nearBottom) {
+    console.log('[Chat] Auto-scrolling to latest message', {
+      force: shouldForceScroll,
+      nearBottom
+    })
+    nextTick(() => {
+      scrollToBottom()
+    })
+    shouldForceScroll = false
+    setAction('idle')
+  } else {
+    console.log('[Chat] User scrolling up (reading older messages), NOT auto-scrolling')
+    setAction('idle')
+  }
+}
+
 onMounted(async () => {
   try {
     if ('scrollRestoration' in history) {
@@ -2265,32 +2794,27 @@ onMounted(async () => {
       }
     }
 
-    const initialMessages = await getMessages()
-    chatStore.setMessages(initialMessages)
-    
-    lastProcessedMessageIds = new Set(initialMessages.map(m => m.id))
-    
-    notifiedMessageIds = new Set(initialMessages.map(m => m.id))
-    
+    // One-time migration: legacy messages without roomId belong to General
     try {
-      if (AUTO_CLEANUP_ON_MOUNT) {
-        console.log('🔄 Performing initial file availability check...')
-        const cleanupResult = await performFileCleanup(initialMessages)
-        console.log('✅ File cleanup completed:', cleanupResult)
-      }
+      await backfillLegacyMessageRooms()
     } catch (err) {
-      console.error('⚠️ File cleanup error (non-critical):', err)
+      console.error('⚠️ Room backfill error (non-critical):', err)
     }
-    
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, SCROLL_DELAY))
-    scrollToBottom()
-    
-    setAction('init')
-    
-    if (messagesContainer.value) {
-      lastKnownScrollTop = messagesContainer.value.scrollTop
-    }
+
+    // Restore last opened room (falls back to General)
+    let savedRoomId: string | null = null
+    try {
+      savedRoomId = localStorage.getItem(CURRENT_ROOM_STORAGE_KEY)
+    } catch { /* storage unavailable - ignore */ }
+    chatStore.setCurrentRoom(savedRoomId || DEFAULT_ROOM_ID)
+
+    await startChatSubscriptions(chatStore.currentRoomId)
+
+    // Live channels list
+    unsubscribeRooms = subscribeToRooms((rooms) => {
+      chatStore.setRooms(rooms)
+      console.log('[Channels] Channels updated:', rooms.length)
+    })
 
     if (isNotificationSupported()) {
       try {
@@ -2334,198 +2858,6 @@ onMounted(async () => {
     document.addEventListener('dragleave', handleGlobalDragLeave as any)
     document.addEventListener('drop', handleGlobalDrop as any)
 
-    const unsubscribe = subscribeToMessages((messages) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      const now = Date.now()
-      if (now - lastSubscriptionUpdateTime < SUBSCRIPTION_DEBOUNCE_MS) {
-        console.log('[Chat] Subscription update debounced - too frequent')
-        return
-      }
-      lastSubscriptionUpdateTime = now
-
-      const currentIds = new Set(messages.map(m => m.id))
-      
-      if (currentIds.size === lastProcessedMessageIds.size && 
-          [...currentIds].every(id => lastProcessedMessageIds.has(id))) {
-        console.log('[Chat] Message IDs unchanged, skipping duplicate update')
-        return
-      }
-      
-      lastProcessedMessageIds = currentIds
-      
-      const newMessages = messages.filter(newMsg => 
-        !chatStore.messages.some(currentMsg => currentMsg.id === newMsg.id)
-      )
-
-      if (chatStore.notificationsEnabled && newMessages.length > 0) {
-        console.log(`[Chat] Found ${newMessages.length} new messages to notify, page visible: ${isPageVisible.value}`)
-        
-        let shouldPlaySound = false
-        
-        newMessages.forEach((message) => {
-          if (!notifiedMessageIds.has(message.id) && message.userId !== authStore.user?.id) {
-            console.log('[Chat] Sending notification for message:', message.id, 'from:', message.username)
-            
-            notifiedMessageIds.add(message.id)
-            
-            shouldPlaySound = true
-            
-            let isMentioned = false
-            try {
-              const mentions = extractMentions(message.content)
-              const currentUsername = authStore.user?.username?.toLowerCase() || ''
-              isMentioned = mentions.some(m => 
-                m.toLowerCase() === currentUsername || m.toLowerCase() === 'all'
-              )
-            } catch (err) {
-              console.warn('[Chat] Error checking mentions:', err)
-            }
-            
-            if (isPageVisible.value) {
-              console.log('[Chat] Page visible - displaying notification for:', message.username, 'mentioned:', isMentioned)
-              
-              const { toastData } = isMentioned 
-                ? notifyMentioned(message, authStore.user?.id || '', isPageVisible.value)
-                : notifyNewMessage(message, authStore.user?.id || '', isPageVisible.value)
-              
-              if (toastData) {
-                toastMessage.value = toastData.content.substring(0, 100) + (toastData.content.length > 100 ? '...' : '')
-                toastAnimal.value = toastData.animal
-                toastUsername.value = toastData.username
-                showNewMessageToast.value = true
-              }
-            } else {
-              console.log('[Chat] Page hidden - using Service Worker for device notification for:', message.username, 'mentioned:', isMentioned)
-              
-              if (navigator.serviceWorker?.controller) {
-                const notificationTitle = isMentioned 
-                  ? `🔔 ${message.animal} ${message.username} mentioned you`
-                  : `💬 ${message.animal} ${message.username}`
-                
-                navigator.serviceWorker.controller.postMessage({
-                  type: 'SHOW_NOTIFICATION',
-                  data: {
-                    title: notificationTitle,
-                    body: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
-                    icon: '/vite.svg',
-                    badge: '/notification-badge.png',
-                    tag: `message-${message.id}`,
-                    requireInteraction: true,
-                    messageId: message.id,
-                    userId: authStore.user?.id || '',
-                  },
-                })
-                console.log('[Chat] Notification sent to Service Worker')
-              } else {
-                console.warn('[Chat] Service Worker not available, notification may not appear')
-              }
-            }
-            
-            console.log('[Chat] Notification complete for message:', message.id)
-          }
-        })
-        
-        if (shouldPlaySound) {
-          console.log('[Chat] Triggering sound notification (once for batch)...')
-          playNotificationSoundDouble()
-        }
-      } else {
-        if (!chatStore.notificationsEnabled) {
-          console.log('[Chat] Notifications disabled, skipping notification')
-        } else {
-          console.log('[Chat] No new messages to notify')
-        }
-      }
-      
-      chatStore.syncMessages(messages)
-      console.log('[Chat] Messages synced:', messages.length)
-      
-      if (CHECK_FILE_ON_NEW_MESSAGE) {
-        performFileCleanup(messages).catch(err => {
-          console.error('⚠️ File cleanup error during message update (non-critical):', err)
-        })
-      }
-      
-      if (isPrepending || lastAction === 'prepend') {
-        console.log('[Chat] Prepend in progress or just finished, skipping auto-scroll', {
-          isPrepending,
-          lastAction
-        })
-        setAction('idle')
-        return
-      }
-      
-      if (now < prependLockUntil) {
-        const timeRemaining = prependLockUntil - now
-        console.log(`[Chat] Blocked by prepend lock window (${timeRemaining}ms remaining)`)
-        return
-      }
-      
-      const container = messagesContainer.value
-      if (!container) return
-      
-      const pixelThresholdExceeded = Math.abs(container.scrollTop - lastKnownScrollTop) > USER_SCROLL_THRESHOLD
-      const recentUserScroll = (Date.now() - lastUserScrollTime) < USER_SCROLL_TIME_WINDOW
-      const userScrolledManually = pixelThresholdExceeded || recentUserScroll
-      
-      if (userScrolledManually) {
-        console.log('[Chat] User actively scrolling, skip auto-scroll', {
-          pixelThreshold: pixelThresholdExceeded,
-          recentScroll: recentUserScroll,
-          currentScrollTop: container.scrollTop,
-          lastKnownScrollTop,
-          delta: container.scrollTop - lastKnownScrollTop
-        })
-        lastKnownScrollTop = container.scrollTop
-        return
-      }
-      
-      const nearBottom = isUserNearBottom()
-      
-      if (shouldForceScroll || nearBottom) {
-        console.log('[Chat] Auto-scrolling to latest message', {
-          force: shouldForceScroll,
-          nearBottom
-        })
-        nextTick(() => {
-          scrollToBottom()
-        })
-        shouldForceScroll = false
-        setAction('idle')
-      } else {
-        console.log('[Chat] User scrolling up (reading older messages), NOT auto-scrolling')
-        setAction('idle')
-      }
-    })
-
-    chatStore.setUnsubscribe(unsubscribe)
-
-    const unsubscribeUsers = subscribeToUsers((users) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      chatStore.setUsers(users)
-    })
-
-    chatStore.setUnsubscribeUsers(unsubscribeUsers)
-
-    const unsubscribeMessageCount = subscribeToMessageCount((count) => {
-      if (!validateSession()) {
-        handleSessionExpiredWithToast()
-        return
-      }
-
-      chatStore.setMessageCount(count)
-      console.log('[Chat] Total message count updated:', count)
-    })
-
-    chatStore.setUnsubscribeMessageCount(unsubscribeMessageCount)
     
     stopPeriodicCleanup = schedulePeriodicCleanup(
       () => chatStore.messages,
@@ -2539,7 +2871,12 @@ onMounted(async () => {
 
 onUnmounted(() => {
   chatStore.unsubscribeFromUpdates()
-  
+
+  if (unsubscribeRooms) {
+    unsubscribeRooms()
+    unsubscribeRooms = null
+  }
+
   if (stopPeriodicCleanup) {
     stopPeriodicCleanup()
     stopPeriodicCleanup = null
@@ -2712,6 +3049,26 @@ onUnmounted(() => {
   gap: 0.75rem;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+
+/* Room / Group Selector */
+.room-selector {
+  align-self: flex-start;
+  text-transform: none !important;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  max-width: 240px;
+}
+
+.room-selector-name {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.room-menu-card {
+  overflow-y: auto;
 }
 
 .stat-item-badge {
