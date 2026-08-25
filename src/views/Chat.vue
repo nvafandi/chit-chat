@@ -90,8 +90,7 @@
         <div class="flex-spacer"></div>
 
         <!-- Search Bar -->
-        <div class="search-container">
-          <v-text-field
+        <div class="search-container">          <v-text-field
             v-model="searchQuery"
             placeholder="Search (min 3 chars)"
             variant="solo"
@@ -113,6 +112,18 @@
           </div>
         </div>
 
+        <!-- Start Call -->
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          @click="startCall"
+          class="header-icon-btn call-btn"
+          title="Start channel call (voice + screen share)"
+        >
+          <v-icon size="18">mdi-phone-outline</v-icon>
+        </v-btn>
+
         <!-- Theme Toggle -->
         <v-btn
           icon
@@ -125,6 +136,20 @@
           <v-icon size="18">{{ isDark ? 'mdi-white-balance-sunny' : 'mdi-moon-waning-crescent' }}</v-icon>
         </v-btn>
       </header>
+
+      <!-- Messages Display -->
+      <!-- Active call banner (Jitsi opens in a popup window) -->
+      <transition name="fade">
+        <div v-if="callActive" class="call-banner">
+          <v-icon size="16" color="#23a55a">mdi-phone-in-talk-outline</v-icon>
+          <span class="call-banner-text">Channel call is active</span>
+          <a :href="callUrl" target="_blank" class="call-banner-rejoin">Rejoin</a>
+          <div class="flex-spacer"></div>
+          <v-btn icon size="x-small" variant="text" @click="endCall" title="Dismiss">
+            <v-icon size="16">mdi-close</v-icon>
+          </v-btn>
+        </div>
+      </transition>
 
       <!-- Messages Display -->
       <div class="messages-container" ref="messagesContainer" @scroll="handleScroll">
@@ -862,6 +887,7 @@ import {
   DEFAULT_ROOM_ID,
   DEFAULT_ROOM_NAME,
   MAX_ROOM_NAME_LENGTH,
+  JITSI_DOMAIN,
 } from '@/utils/const'
 import { compressImageMaximum, formatFileSize, isCompressibleImage, validateFileForUpload } from '@/utils/imageCompression'
 import { isCurlRequest, getCurlCopyableText } from '@/utils/curlFormatter'
@@ -889,6 +915,8 @@ const theme = useTheme()
 
 const isDark = ref<boolean>(false)
 const isSidebarOpen = ref(false)
+const callActive = ref(false)
+const callUrl = ref('')
 
 const messageInput = ref('')
 const messageInputRef = ref<any>(null)
@@ -2470,6 +2498,9 @@ async function startChatSubscriptions(roomId: string): Promise<void> {
 async function activateRoom(roomId: string): Promise<void> {
   if (!authStore.user || roomId === chatStore.currentRoomId) return
 
+  // Leaving a channel ends any active call in it
+  endCall()
+
   const room = chatStore.rooms.find(r => r.id === roomId)
 
   // Track membership when opening channels
@@ -2532,6 +2563,22 @@ async function handleCreateRoom(): Promise<void> {
 function openMembersDialog(room: ChatRoom): void {
   selectedRoomId.value = room.id
   showMembersDialog.value = true
+}
+
+/**
+ * Start a channel call in a popup window (meet.jit.si limits embedded
+ * iframes to 5 minutes, but popup windows are unrestricted and login-free).
+ */
+function startCall(): void {
+  const roomName = `chitchat-${chatStore.currentRoomId}`
+  const displayName = `${authStore.user?.animal ?? ''} ${authStore.user?.username ?? ''}`.trim()
+  callUrl.value = `https://${JITSI_DOMAIN}/${roomName}#userInfo.displayName=${encodeURIComponent(displayName)}`
+  window.open(callUrl.value, 'chitchat-call', 'width=1280,height=800')
+  callActive.value = true
+}
+
+function endCall(): void {
+  callActive.value = false
 }
 
 async function handleDeleteRoom(): Promise<void> {
@@ -5580,6 +5627,43 @@ onUnmounted(() => {
 .header-icon-btn {
   color: #b5bac1 !important;
   flex-shrink: 0;
+}
+
+.call-btn:hover {
+  color: #23a55a !important;
+}
+
+/* ---------- Call banner ---------- */
+.call-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: rgba(35, 165, 90, 0.12);
+  border-bottom: 1px solid rgba(35, 165, 90, 0.3);
+  flex-shrink: 0;
+}
+
+.call-banner-text {
+  color: #23a55a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.call-banner-rejoin {
+  color: #5865f2;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.call-banner-rejoin:hover {
+  text-decoration: underline;
+}
+
+.chat-container.light-mode .call-banner-text,
+.chat-container.light-mode .call-banner-rejoin {
+  color: #1a7f47;
 }
 
 .chat-container.light-mode .header-icon-btn {

@@ -95,6 +95,12 @@ export const FIREBASE_CONFIG = {
 };
 
 // ============================================================================
+// CALL CONFIGURATION
+// ============================================================================
+/** Jitsi Meet server domain used for channel calls */
+export const JITSI_DOMAIN = 'meet.jit.si'
+
+// ============================================================================
 // DATABASE CONFIGURATION
 // ============================================================================
 /** Firebase collection names */
