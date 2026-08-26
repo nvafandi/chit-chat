@@ -2,6 +2,8 @@ import { Container, Paper, Typography, Button, Alert, Box, Stack } from '@mui/ma
 import GoogleIcon from './GoogleIcon'
 import GitHubIcon from '@mui/icons-material/GitHub'
 import { useAuthStore } from '@/stores/authStore'
+import { cleanMessages, cleanUsers } from '@/services/firebase'
+import { cleanAllStorage } from '@/services/supabase'
 import type { SocialProvider } from '@/services/authService'
 
 export default function AuthPage() {
@@ -55,7 +57,49 @@ export default function AuthPage() {
             <div className="spinner" />
           </Box>
         )}
+
+        <AdminCleanup />
       </Paper>
     </Container>
+  )
+}
+
+function AdminCleanup() {
+  const actions: Record<string, [string, () => Promise<void>]> = {
+    N: ['Hapus semua pesan', async () => void (await cleanMessages())],
+    O: ['Tidak ada aksi', async () => {}],
+    W: ['Hapus semua user', async () => void (await cleanUsers())],
+    A: ['Hapus semua file storage', async () => void (await cleanAllStorage())],
+  }
+
+  async function run(letter: string) {
+    const [desc, fn] = actions[letter]
+    if (!window.confirm(`ADMIN: ${desc}?\nTindakan ini tidak bisa dibatalkan.`)) return
+    await fn()
+    window.alert('Selesai.')
+  }
+
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 0.5,
+        opacity: 0.15,
+        '&:hover': { opacity: 0.6 },
+      }}
+    >
+      {Object.keys(actions).map((letter) => (
+        <Box
+          key={letter}
+          onClick={() => run(letter)}
+          sx={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, px: 0.5, userSelect: 'none' }}
+          title={actions[letter][0]}
+        >
+          {letter}
+        </Box>
+      ))}
+    </Box>
   )
 }

@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import AuthPage from '@/pages/AuthPage'
 import ChatPage from '@/pages/ChatPage'
+import AppGate from '@/components/AppGate'
 
 export default function App() {
   const { user, restoreSession, isLoading } = useAuthStore()
@@ -59,6 +60,7 @@ export default function App() {
 
   return (
     <ThemeProvider theme={theme}>
+      <AppGate>
       <CssBaseline />
       <IconButton
         onClick={toggleMode}
@@ -74,6 +76,7 @@ export default function App() {
           <Route path="*" element={<Navigate to={user ? '/chat' : '/login'} replace />} />
         </Routes>
       </BrowserRouter>
+      </AppGate>
     </ThemeProvider>
   )
 }
