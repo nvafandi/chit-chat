@@ -15,13 +15,6 @@
         { "fieldPath": "type", "order": "ASCENDING" },
         { "fieldPath": "members", "arrayConfig": "CONTAINS" }
       ]
-    },
-    {
-      "collectionGroup": "liveLocations",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "id", "order": "ASCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []
