@@ -7,7 +7,7 @@ on:
         description: 'Release notes'
         default: 'Build terbaru CHIT CHuT Android'
   push:
-    branches: [staging]
+    branches: [mobile]
     paths:
       - 'mobile/**'
       - '.github/workflows/mobile-deploy.yml'

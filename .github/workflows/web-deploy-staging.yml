@@ -2,7 +2,7 @@ name: Web Deploy (Staging)
 
 on:
   push:
-    branches: [staging]
+    branches: [web]
     paths:
       - 'web/**'
       - 'firebase.json'
