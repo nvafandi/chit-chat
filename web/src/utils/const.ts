@@ -99,8 +99,8 @@ export const FIREBASE_CONFIG = {
 // ============================================================================
 /** LiveKit Cloud project used for channel calls (web + mobile share rooms) */
 export const LIVEKIT_URL = 'wss://chit-chut-osejsjoz.livekit.cloud'
-export const LIVEKIT_API_KEY = 'APIPHJRFMrmbxBh'
-export const LIVEKIT_API_SECRET = 'v8kBzlGtppefenQeiZts1DyLUaKwQNZHm5hcxN3sE88D'
+export const LIVEKIT_API_KEY = 'API5xSCksoGMDiW'
+export const LIVEKIT_API_SECRET = 'qr1NxZLRaNQteKROYAsCuYTLzKEtFwlQC1ISkjiytlO'
 
 // ============================================================================
 // DATABASE CONFIGURATION
