@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, CircularProgress } from '@mui/material'
+import { Box, CircularProgress, Typography } from '@mui/material'
 import { isChunkedManifestUrl, resolveChunkedFile } from '@/services/supabase'
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
 export default function ResolvedImage({ url, alt, width = 240, height = 170, onClick }: Props) {
   const [src, setSrc] = useState<string>(isChunkedManifestUrl(url) ? '' : url)
   const [loading, setLoading] = useState(isChunkedManifestUrl(url))
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let revoke: string | null = null
@@ -45,12 +46,40 @@ export default function ResolvedImage({ url, alt, width = 240, height = 170, onC
       </Box>
     )
   }
+  if (failed) {
+    return (
+      <Box
+        sx={{
+          width,
+          height,
+          display: 'grid',
+          placeItems: 'center',
+          bgcolor: 'action.hover',
+          borderRadius: 1.5,
+          border: '1px dashed',
+          borderColor: 'divider',
+          textAlign: 'center',
+          p: 1,
+        }}
+      >
+        <Box>
+          <Typography sx={{ fontSize: 26 }}>🖼️</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Gambar tidak tersedia
+            <br />
+            (kedaluwarsa / dihapus)
+          </Typography>
+        </Box>
+      </Box>
+    )
+  }
   if (!src) return null
   return (
     <Box
       component="img"
       src={src}
       alt={alt}
+      onError={() => setFailed(true)}
       onClick={onClick}
       sx={{ width, height, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer' }}
     />
