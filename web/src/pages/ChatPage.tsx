@@ -30,7 +30,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import CloseIcon from '@mui/icons-material/Close'
 import LockIcon from '@mui/icons-material/Lock'
-import type { Message, ChatRoom } from '@/types'
+import type { Message, ChatRoom, ReplyTo } from '@/types'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import { sendMessage, joinRoom, startLiveLocation, updateLiveLocation, stopLiveLocation as fbStopLiveLocation } from '@/services/firebase'
@@ -42,6 +42,10 @@ import MessageList from '@/components/MessageList'
 import CreateChannelDialog from '@/components/CreateChannelDialog'
 import ManageMembersDialog from '@/components/ManageMembersDialog'
 import LiveLocationBubble from '@/components/LiveLocationBubble'
+import ResolvedImage from '@/components/ResolvedImage'
+import RichContent from '@/components/RichContent'
+import { downloadAttachment } from '@/utils/download'
+import ReplyIcon from '@mui/icons-material/Reply'
 import {
   isNotificationsEnabled,
   setNotificationUserId,
@@ -54,8 +58,6 @@ import {
   hideMessage,
 } from '@/services/firebase'
 import {
-  containsMentions,
-  convertMentionsToHtml,
   getLastMentionBeingTyped,
   insertMention,
 } from '@/utils/mentionFormatter'
@@ -91,6 +93,8 @@ export default function ChatPage() {
   const inputElRef = useRef<HTMLTextAreaElement | null>(null)
   const [isLiveTracking, setIsLiveTracking] = useState(false)
   const [notifOn, setNotifOn] = useState(isNotificationsEnabled())
+  const [replyingTo, setReplyingTo] = useState<ReplyTo | null>(null)
+  const [isDragover, setIsDragover] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -161,12 +165,14 @@ export default function ChatPage() {
     }
 
     setInput('')
+    setReplyingTo(null)
     await sendMessage(
       user.id,
       user.username,
       user.animal,
       content || `📎 ${files[0]?.name ?? 'Attachment'}`,
-      undefined, undefined, undefined, undefined, undefined,
+      replyingTo ?? undefined,
+      undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined, undefined,
       undefined,
       attachments,
@@ -288,6 +294,31 @@ export default function ChatPage() {
                 {message.animal} {message.username}
               </Typography>
             )}
+            {message.replyTo && (
+              <Box
+                sx={{
+                  mb: 0.5,
+                  p: 0.5,
+                  pl: 1,
+                  borderRadius: 1,
+                  bgcolor: 'rgba(0,0,0,0.25)',
+                  borderLeft: '2px solid',
+                  borderColor: isOwn ? 'rgba(255,255,255,0.6)' : '#c79fff',
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  const el = document.getElementById(`msg-${message.replyTo!.id}`)
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
+              >
+                <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, color: isOwn ? '#fff' : '#c79fff' }}>
+                  {message.replyTo.animal} {message.replyTo.username}
+                </Typography>
+                <Typography variant="caption" noWrap sx={{ display: 'block', opacity: 0.75, maxWidth: 260 }}>
+                  {message.replyTo.content}
+                </Typography>
+              </Box>
+            )}
             {message.isLiveLocation && message.location && <LiveLocationBubble message={message} />}
             {!message.isLiveLocation && message.location && (
               <Box
@@ -307,17 +338,9 @@ export default function ChatPage() {
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
-              containsMentions(message.content) ? (
-                <Typography
-                  variant="body2"
-                  sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: message.attachments?.length ? 0.5 : 0, '& .mention-tag': { bgcolor: 'rgba(255,255,255,0.22)', color: isOwn ? '#fff' : '#c79fff', px: 0.5, borderRadius: 0.5, fontWeight: 700 } }}
-                  dangerouslySetInnerHTML={{ __html: convertMentionsToHtml(message.content) }}
-                />
-              ) : (
-                <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: message.attachments?.length ? 0.5 : 0 }}>
-                  {message.content}
-                </Typography>
-              )
+              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0 }}>
+                <RichContent content={message.content} isOwn={isOwn} />
+              </Box>
             )}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
               <Typography variant="caption" sx={{ opacity: 0.55, fontSize: 10 }}>
@@ -340,6 +363,20 @@ export default function ChatPage() {
             }}
             className="msg-actions"
           >
+            <IconButton
+              size="small"
+              title="Balas"
+              onClick={() =>
+                setReplyingTo({
+                  id: message.id,
+                  username: message.username,
+                  animal: message.animal ?? '🐾',
+                  content: message.content.slice(0, 120),
+                })
+              }
+            >
+              <ReplyIcon sx={{ fontSize: 15 }} />
+            </IconButton>
             <IconButton
               size="small"
               title={message.pinned ? 'Lepas pin' : 'Pin pesan'}
@@ -375,22 +412,18 @@ export default function ChatPage() {
       <Box sx={{ display: 'grid', gap: 0.5 }}>
         {(list as never[]).map((att: any, i: number) =>
           att.type === 'image' ? (
-            <Box
+            <ResolvedImage
               key={i}
-              component="img"
-              src={att.url}
+              url={att.url}
               alt={att.name}
               onClick={() => window.open(att.url, '_blank')}
-              sx={{ width: 240, height: 170, objectFit: 'cover', borderRadius: 1.5, cursor: 'pointer' }}
             />
           ) : (
             <Box
               key={i}
-              component="a"
-              href={att.url}
-              target="_blank"
-              rel="noreferrer"
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'inherit', bgcolor: 'rgba(0,0,0,0.25)', px: 1, py: 0.5, borderRadius: 1 }}
+              component="button"
+              onClick={() => downloadAttachment(att.url, att.name).catch(() => window.open(att.url, '_blank'))}
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'inherit', bgcolor: 'rgba(0,0,0,0.25)', px: 1, py: 0.5, borderRadius: 1, border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
               📄 <Typography variant="caption" noWrap>{att.name}</Typography>
             </Box>
@@ -519,13 +552,74 @@ export default function ChatPage() {
           </Box>
         )}
 
-        <MessageList
-          messages={visibleMessages}
-          renderItem={renderMessage}
-          onLoadMore={() => useChatStore.getState().loadMore()}
-          isLoadingMore={useChatStore((s) => s.isLoadingMore)}
-          hasMore={useChatStore((s) => s.hasMore)}
-        />
+        <Box
+          sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0, position: 'relative' }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDragover(true)
+          }}
+          onDragLeave={() => setIsDragover(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setIsDragover(false)
+            const files = Array.from(e.dataTransfer.files ?? [])
+            if (files.length === 0) return
+            setPendingFiles((prev) => [
+              ...prev,
+              ...files.map((f) => ({
+                file: f,
+                previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : '',
+                name: f.name,
+                mimeType: f.type,
+                size: f.size,
+                isImage: f.type.startsWith('image/'),
+              })),
+            ])
+          }}
+        >
+          {isDragover && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 5,
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: 'rgba(100,30,253,0.15)',
+                border: '2px dashed',
+                borderColor: 'primary.main',
+                borderRadius: 1.5,
+                pointerEvents: 'none',
+              }}
+            >
+              <Typography variant="h6" color="primary">Drop file untuk dilampirkan</Typography>
+            </Box>
+          )}
+          <MessageList
+            messages={visibleMessages}
+            renderItem={renderMessage}
+            onLoadMore={() => useChatStore.getState().loadMore()}
+            isLoadingMore={useChatStore((s) => s.isLoadingMore)}
+            hasMore={useChatStore((s) => s.hasMore)}
+          />
+        </Box>
+
+        {/* Quoted reply preview */}
+        {replyingTo && (
+          <Box sx={{ mx: 1.5, mt: 1, p: 1, borderRadius: 1.5, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', gap: 1, borderLeft: '3px solid', borderColor: 'primary.main' }}>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+              <Typography variant="caption" sx={{ color: '#c79fff', fontWeight: 700, display: 'block' }}>
+                {replyingTo.animal} {replyingTo.username}
+              </Typography>
+              <Typography variant="caption" noWrap sx={{ display: 'block', opacity: 0.7 }}>
+                {replyingTo.content}
+              </Typography>
+            </Box>
+            <IconButton size="small" onClick={() => setReplyingTo(null)}>
+              <CloseIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Box>
+        )}
 
         {/* Pending preview strip */}
         {pendingFiles.length > 0 && (
