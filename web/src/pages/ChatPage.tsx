@@ -95,6 +95,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [showStickers, setShowStickers] = useState(false)
   const [inCall, setInCall] = useState(false)
+  const [callRoom, setCallRoom] = useState<string | null>(null)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [manageRoom, setManageRoom] = useState<ChatRoom | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -139,6 +140,16 @@ export default function ChatPage() {
 
   useEffect(() => () => {
     if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+  }, [])
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('call')
+    if (requested) {
+      setCallRoom(requested)
+      setInCall(true)
+      // clean the URL so refresh doesn't rejoin unexpectedly
+      window.history.replaceState({}, '', '/chat')
+    }
   }, [])
 
   function handleSelectRoom(room: ChatRoom) {
@@ -809,10 +820,25 @@ export default function ChatPage() {
 
       {inCall && (
         <LiveKitCall
-          roomName={`channel-${currentRoomId}`}
+          roomName={callRoom ?? `channel-${currentRoomId}`}
           identity={`${user.id}-web-${Date.now()}`}
           displayName={`${user.animal} ${user.username}`}
-          onLeave={() => setInCall(false)}
+          onLeave={() => {
+            setInCall(false)
+            setCallRoom(null)
+          }}
+          onInviteChannel={(room) => {
+            sendMessage(
+              user.id,
+              user.username,
+              user.animal,
+              `📞 CALL:${room}`,
+              undefined, undefined, undefined, undefined, undefined,
+              undefined, undefined, undefined, undefined, undefined,
+              undefined, undefined, undefined,
+              currentRoomId
+            ).catch(() => {})
+          }}
         />
       )}
     </Box>
