@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Box, Typography, IconButton, List, ListItem, ListItemButton, ListItemAvatar, Avatar, Chip, CircularProgress } from '@mui/material'
+import { Box, Typography, IconButton, List, ListItem, ListItemButton, ListItemAvatar, Avatar, Chip, CircularProgress, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import MyLocationIcon from '@mui/icons-material/MyLocation'
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'
+import DirectionsBikeIcon from '@mui/icons-material/DirectionsBike'
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar'
 import { subscribeToActiveRoomLocations } from '@/services/firebase'
 import type { LiveLocation } from '@/types'
 
@@ -52,13 +55,14 @@ function formatDist(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`
 }
 
+type Profile = 'foot' | 'bike' | 'car'
+
 async function fetchRoute(
   from: [number, number],
-  to: [number, number]
+  to: [number, number],
+  profile: Profile
 ): Promise<[number, number][] | null> {
   try {
-    const dist = haversine(from[0], from[1], to[0], to[1])
-    const profile = dist < 2 ? 'foot' : 'car'
     const url = `https://routing.openstreetmap.de/${profile}/v2/route/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`
     const res = await fetch(url)
     if (!res.ok) return null
@@ -82,6 +86,8 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
   const [myPos, setMyPos] = useState<[number, number] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [profile, setProfile] = useState<Profile>('car')
+  const selectedLocRef = useRef<LiveLocation | null>(null)
 
   // Track own position
   useEffect(() => {
@@ -129,7 +135,7 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
   }, [myPos])
 
   // Draw route to selected user
-  const drawRoute = async (target: LiveLocation) => {
+  const drawRoute = async (target: LiveLocation, p: Profile) => {
     if (!mapRef.current || !myPos) return
     const map = mapRef.current
     setLoading(true)
@@ -137,7 +143,7 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
     lineRef.current?.remove()
     popupRef.current?.remove()
 
-    const coords = await fetchRoute(myPos, [target.latitude, target.longitude])
+    const coords = await fetchRoute(myPos, [target.latitude, target.longitude], p)
     setLoading(false)
 
     if (coords && coords.length > 1) {
@@ -187,7 +193,8 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
 
           m.on('click', () => {
             setSelectedId(loc.id)
-            drawRoute(loc)
+            selectedLocRef.current = loc
+            drawRoute(loc, profile)
           })
 
           markers.set(loc.id, m)
@@ -210,6 +217,13 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
 
     return () => unsub()
   }, [roomId, myPos, selectedId])
+
+  // Re-draw route when profile changes
+  useEffect(() => {
+    if (selectedId && selectedLocRef.current) {
+      drawRoute(selectedLocRef.current, profile)
+    }
+  }, [profile])
 
   // Re-center on my position (max zoom)
   const recenter = () => {
@@ -235,6 +249,19 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
           <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
             {sharers.length} sedang share
           </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5, mb: 1 }}>
+            <ToggleButtonGroup
+              value={profile}
+              exclusive
+              onChange={(_, v) => v && setProfile(v)}
+              size="small"
+              sx={{ '& .MuiToggleButton-root': { px: 1, py: 0.25, border: '1px solid rgba(255,255,255,0.12)' } }}
+            >
+              <ToggleButton value="foot"><DirectionsWalkIcon fontSize="small" /></ToggleButton>
+              <ToggleButton value="bike"><DirectionsBikeIcon fontSize="small" /></ToggleButton>
+              <ToggleButton value="car"><DirectionsCarIcon fontSize="small" /></ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
           <List dense disablePadding>
             {sharers.map((s) => {
               const isSelected = selectedId === s.id
@@ -245,7 +272,8 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
                     onClick={() => {
                       if (mapRef.current) {
                         setSelectedId(s.id)
-                        drawRoute(s)
+                        selectedLocRef.current = s
+                        drawRoute(s, profile)
                       }
                     }}
                     sx={{ borderRadius: 1, px: 1, py: 0.5 }}
