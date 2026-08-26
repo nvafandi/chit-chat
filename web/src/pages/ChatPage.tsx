@@ -66,6 +66,9 @@ import StickerPicker from '@/components/StickerPicker'
 import LiveKitCall from '@/components/LiveKitCall'
 import EmojiPicker from '@/components/EmojiPicker'
 import ImageViewer from '@/components/ImageViewer'
+import LiveRoomMap from '@/components/LiveRoomMap'
+import { subscribeToActiveRoomLocations } from '@/services/firebase'
+import MapIcon from '@mui/icons-material/Map'
 
 interface PendingFile {
   file: File
@@ -99,6 +102,15 @@ export default function ChatPage() {
   const [isDragover, setIsDragover] = useState(false)
   const [viewerUrl, setViewerUrl] = useState<string | null>(null)
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null)
+  const [showRoomMap, setShowRoomMap] = useState(false)
+  const [activeSharers, setActiveSharers] = useState(0)
+
+  useEffect(() => {
+    const unsub = subscribeToActiveRoomLocations(currentRoomId, (locs) =>
+      setActiveSharers(locs.length)
+    )
+    return unsub
+  }, [currentRoomId])
 
   useEffect(() => {
     if (!user) return
@@ -529,6 +541,13 @@ export default function ChatPage() {
               {notifOn ? <NotificationsIcon sx={{ fontSize: 18 }} /> : <NotificationsOffIcon sx={{ fontSize: 18 }} />}
             </IconButton>
           </Tooltip>
+          <Tooltip title="Peta live location gabungan">
+            <IconButton size="small" onClick={() => setShowRoomMap(true)}>
+              <Badge badgeContent={activeSharers} color="success" slotProps={{ badge: { style: { fontSize: 9, height: 15, minWidth: 15 } } }}>
+                <MapIcon sx={{ fontSize: 18 }} />
+              </Badge>
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Channel call">
             <IconButton size="small" onClick={() => setInCall(true)}>
               <PhoneIcon sx={{ fontSize: 18 }} />
@@ -760,6 +779,8 @@ export default function ChatPage() {
       />
 
       {viewerUrl && <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} />}
+
+      {showRoomMap && <LiveRoomMap roomId={currentRoomId} onClose={() => setShowRoomMap(false)} />}
 
       <StickerPicker open={showStickers} onClose={() => setShowStickers(false)} onSelect={handleSelectSticker} />
 

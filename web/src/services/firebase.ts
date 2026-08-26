@@ -19,7 +19,7 @@ import {
   DocumentSnapshot,
 } from 'firebase/firestore'
 import { FIREBASE_CONFIG, COLLECTIONS, MESSAGES_PER_PAGE, MESSAGE_EXPIRATION_TIME, DEFAULT_ROOM_ID } from '@/utils/const'
-import type { User, Message, ReplyTo, ChatRoom, MemberInfo, RoomType } from '@/types'
+import type { User, Message, ReplyTo, ChatRoom, MemberInfo, RoomType, LiveLocation } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { getRandomAnimal } from '@/utils/animals'
 
@@ -949,4 +949,23 @@ export async function deleteLiveLocation(messageId: string): Promise<void> {
   if (!snap.empty) {
     await deleteDoc(snap.docs[0].ref)
   }
+}
+
+/**
+ * Subscribe to ALL active live locations in a room (multi-user combined view).
+ */
+export function subscribeToActiveRoomLocations(
+  roomId: string,
+  callback: (locs: LiveLocation[]) => void
+): () => void {
+  const q = query(
+    collection(db, COLLECTIONS.LIVE_LOCATIONS),
+    where('roomId', '==', roomId),
+    where('active', '==', true)
+  )
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => d.data() as LiveLocation)),
+    (err) => console.warn('[firebase] active locations query error:', err)
+  )
 }
