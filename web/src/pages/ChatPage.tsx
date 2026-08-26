@@ -64,6 +64,8 @@ import {
 import StickerView from '@/components/StickerView'
 import StickerPicker from '@/components/StickerPicker'
 import LiveKitCall from '@/components/LiveKitCall'
+import EmojiPicker from '@/components/EmojiPicker'
+import ImageViewer from '@/components/ImageViewer'
 
 interface PendingFile {
   file: File
@@ -95,6 +97,8 @@ export default function ChatPage() {
   const [notifOn, setNotifOn] = useState(isNotificationsEnabled())
   const [replyingTo, setReplyingTo] = useState<ReplyTo | null>(null)
   const [isDragover, setIsDragover] = useState(false)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
+  const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -416,7 +420,7 @@ export default function ChatPage() {
               key={i}
               url={att.url}
               alt={att.name}
-              onClick={() => window.open(att.url, '_blank')}
+              onClick={() => setViewerUrl(att.url)}
             />
           ) : (
             <Box
@@ -743,6 +747,19 @@ export default function ChatPage() {
           onClose={() => setManageRoom(null)}
         />
       )}
+
+      <EmojiPicker
+        open={!!emojiAnchor}
+        anchorEl={emojiAnchor}
+        onClose={() => setEmojiAnchor(null)}
+        onSelect={(emoji) => {
+          setInput((v) => v + emoji)
+          setEmojiAnchor(null)
+          inputElRef.current?.focus()
+        }}
+      />
+
+      {viewerUrl && <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} />}
 
       <StickerPicker open={showStickers} onClose={() => setShowStickers(false)} onSelect={handleSelectSticker} />
 
