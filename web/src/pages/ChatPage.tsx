@@ -15,6 +15,9 @@ import {
   Paper,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import MenuIcon from '@mui/icons-material/Menu'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme as useMuiTheme } from '@mui/material/styles'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions'
 import MyLocationIcon from '@mui/icons-material/MyLocation'
@@ -104,6 +107,9 @@ export default function ChatPage() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null)
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null)
   const [showRoomMap, setShowRoomMap] = useState(false)
+  const muiTheme = useMuiTheme()
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'))
+  const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia('(max-width: 900px)').matches)
   const [activeSharers, setActiveSharers] = useState(0)
 
   useEffect(() => {
@@ -454,11 +460,20 @@ export default function ChatPage() {
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Channel sidebar */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'persistent'}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         sx={{
           width: DRAWER_WIDTH,
           flexShrink: 0,
-          '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: '#2b2d31', borderRight: '1px solid rgba(255,255,255,0.06)' },
+          '& .MuiDrawer-paper': {
+            width: DRAWER_WIDTH,
+            boxSizing: 'border-box',
+            bgcolor: '#2b2d31',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+            transition: 'width 0.2s ease',
+            ...(isMobile ? {} : { position: 'relative' }),
+          },
         }}
       >
         <Box sx={{ p: 2, color: "#f2f3f5", borderBottom: '1px solid rgba(0,0,0,0.35)' }}>
@@ -516,6 +531,11 @@ export default function ChatPage() {
       {/* Main area */}
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Box sx={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, px: 2, bgcolor: '#313338', borderBottom: '1px solid rgba(0,0,0,0.35)' }}>
+          <Tooltip title={sidebarOpen && !isMobile ? 'Sembunyikan sidebar' : 'Tampilkan sidebar'}>
+            <IconButton size="small" onClick={() => setSidebarOpen((v) => !v)}>
+              <MenuIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
           <Typography sx={{ color: '#949ba4' }}>#</Typography>
           <Typography noWrap sx={{ fontWeight: 600, color: "#f2f3f5" }}>{roomName}</Typography>
           <Badge badgeContent={users.length} color="primary" sx={{ ml: 1 }}>
