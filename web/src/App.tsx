@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
 import { useThemeStore } from '@/stores/themeStore'
+import { scheduleFileCleanup } from '@/services/fileCleanup'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import AuthPage from '@/pages/AuthPage'
@@ -16,7 +17,9 @@ export default function App() {
 
   useEffect(() => {
     restoreSession()
-  }, [restoreSession])
+    // Size-based storage retention: >100MB = 24h, else 3 days
+    return scheduleFileCleanup()
+  }, [])
 
   useEffect(() => {
     if (user) {

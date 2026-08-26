@@ -25,11 +25,17 @@ export const SUPABASE_BUCKET_NAME = 'chat-images'
 // ============================================================================
 // FILE MANAGEMENT CONFIGURATION
 // ============================================================================
-/** Image file expiration time in milliseconds (1 day = 24 hours) */
-export const IMAGE_EXPIRATION_TIME = 24 * 60 * 60 * 1000 // 1 day
+/** Files larger than this threshold get the short retention window */
+export const FILE_LARGE_SIZE_THRESHOLD = 100 * 1024 * 1024 // 100 MB
 
-/** Non-image file expiration time in milliseconds (1 day = 24 hours) */
-export const FILE_EXPIRATION_TIME = 24 * 60 * 60 * 1000 // 1 day
+/** Retention for files > FILE_LARGE_SIZE_THRESHOLD (24 hours) */
+export const FILE_LARGE_EXPIRATION_TIME = 24 * 60 * 60 * 1000 // 1 day
+
+/** Retention for everything else (3 days) */
+export const FILE_EXPIRATION_TIME = 3 * 24 * 60 * 60 * 1000 // 3 days
+
+/** Legacy single-duration constants (kept for older utilities) */
+export const IMAGE_EXPIRATION_TIME = FILE_EXPIRATION_TIME
 
 /** Message expiration time in milliseconds (1 week) */
 export const MESSAGE_EXPIRATION_TIME = 7 * 24 * 60 * 60 * 1000 // 1 week

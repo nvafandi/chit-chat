@@ -13,6 +13,10 @@ export async function downloadAttachment(url: string, filename: string): Promise
     blob = resolved.blob
   } else {
     const res = await fetch(url)
+    if (res.status === 404) {
+      throw new Error('File sudah kedaluwarsa (masa simpan 24 jam) dan telah dihapus.')
+    }
+    if (!res.ok) throw new Error(`Gagal mengunduh (HTTP ${res.status})`)
     blob = await res.blob()
   }
 

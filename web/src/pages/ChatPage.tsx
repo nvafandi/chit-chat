@@ -106,6 +106,7 @@ export default function ChatPage() {
   const [notifOn, setNotifOn] = useState(isNotificationsEnabled())
   const [replyingTo, setReplyingTo] = useState<ReplyTo | null>(null)
   const [isDragover, setIsDragover] = useState(false)
+  const [caption, setCaption] = useState('')
   const [viewerUrl, setViewerUrl] = useState<string | null>(null)
   const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null)
   const [showRoomMap, setShowRoomMap] = useState(false)
@@ -203,6 +204,7 @@ export default function ChatPage() {
       }
       setIsUploading(false)
       setPendingFiles([])
+      setCaption('')
     }
 
     setInput('')
@@ -211,7 +213,7 @@ export default function ChatPage() {
       user.id,
       user.username,
       user.animal,
-      content || `📎 ${files[0]?.name ?? 'Attachment'}`,
+      content || caption.trim() || `📎 ${files[0]?.name ?? 'Attachment'}`,
       replyingTo ?? undefined,
       undefined, undefined, undefined, undefined,
       undefined, undefined, undefined, undefined, undefined,
@@ -220,6 +222,27 @@ export default function ChatPage() {
       undefined,
       currentRoomId
     )
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData?.items ?? [])
+    const images = items.filter((it) => it.type.startsWith('image/'))
+    if (images.length === 0) return // let normal text paste through
+    e.preventDefault()
+    const files = images
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => !!f)
+    setPendingFiles((prev) => [
+      ...prev,
+      ...files.map((f) => ({
+        file: f,
+        previewUrl: URL.createObjectURL(f),
+        name: f.name && f.name !== 'image.png' ? f.name : `clipboard-${Date.now()}.png`,
+        mimeType: f.type || 'image/png',
+        size: f.size,
+        isImage: true,
+      })),
+    ])
   }
 
   function handleFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
@@ -478,7 +501,11 @@ export default function ChatPage() {
             <Box
               key={i}
               component="button"
-              onClick={() => downloadAttachment(att.url, att.name).catch(() => window.open(att.url, '_blank'))}
+              onClick={() =>
+                downloadAttachment(att.url, att.name).catch((e) =>
+                  alert(e instanceof Error ? e.message : 'Gagal mengunduh file')
+                )
+              }
               sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'inherit', bgcolor: 'rgba(0,0,0,0.25)', px: 1, py: 0.5, borderRadius: 1, border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
               📄 <Typography variant="caption" noWrap>{att.name}</Typography>
@@ -644,6 +671,7 @@ export default function ChatPage() {
             setIsDragover(true)
           }}
           onDragLeave={() => setIsDragover(false)}
+          onPaste={handlePaste}
           onDrop={(e) => {
             e.preventDefault()
             setIsDragover(false)
@@ -706,25 +734,46 @@ export default function ChatPage() {
           </Box>
         )}
 
-        {/* Pending preview strip */}
+        {/* WhatsApp-style attachment preview */}
         {pendingFiles.length > 0 && (
-          <Box sx={{ display: 'flex', gap: 1, px: 1.5, pt: 1, flexWrap: 'wrap' }}>
-            {pendingFiles.map((f, i) => (
-              <Box key={i} sx={{ position: 'relative' }}>
-                {f.previewUrl ? (
-                  <Box component="img" src={f.previewUrl} sx={{ width: 52, height: 52, borderRadius: 1.5, objectFit: 'cover' }} />
-                ) : (
-                  <Box sx={{ width: 52, height: 52, borderRadius: 1.5, bgcolor: 'background.paper', display: 'grid', placeItems: 'center', fontSize: 22 }}>📄</Box>
-                )}
-                <IconButton
-                  size="small"
-                  onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
-                  sx={{ position: 'absolute', top: -6, right: -6, bgcolor: 'rgba(0,0,0,0.7)', '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' }, width: 18, height: 18, '& svg': { fontSize: 12 } }}
-                >
-                  ✕
-                </IconButton>
-              </Box>
-            ))}
+          <Box sx={{ bgcolor: '#161320', borderTop: '1px solid rgba(255,255,255,0.08)', px: 2, pt: 1.5, display: 'flex', gap: 2, alignItems: 'flex-end' }}>
+            <Box sx={{ display: 'flex', gap: 1.5, overflowX: 'auto', flexGrow: 1, py: 0.5 }}>
+              {pendingFiles.map((f, i) => (
+                <Box key={i} sx={{ position: 'relative', flexShrink: 0 }}>
+                  {f.previewUrl ? (
+                    <Box
+                      component="img"
+                      src={f.previewUrl}
+                      sx={
+                        pendingFiles.length === 1
+                          ? { maxHeight: 240, maxWidth: '100%', borderRadius: 2, display: 'block' }
+                          : { width: 130, height: 130, objectFit: 'cover', borderRadius: 2, display: 'block' }
+                      }
+                    />
+                  ) : (
+                    <Box sx={{ width: 130, height: 130, borderRadius: 2, bgcolor: 'background.paper', display: 'grid', placeItems: 'center', gap: 0.5 }}>
+                      <Typography sx={{ fontSize: 30 }}>📄</Typography>
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 110, textAlign: 'center' }}>{f.name}</Typography>
+                    </Box>
+                  )}
+                  <IconButton
+                    size="small"
+                    onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
+                    sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(0,0,0,0.65)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' }, width: 24, height: 24 }}
+                  >
+                    ✕
+                  </IconButton>
+                </Box>
+              ))}
+            </Box>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Tambahkan keterangan…"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              sx={{ mb: 0.5, maxWidth: 420, '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.06)' } }}
+            />
           </Box>
         )}
 
@@ -740,7 +789,7 @@ export default function ChatPage() {
           <Tooltip title="Sticker">
             <IconButton onClick={() => setShowStickers(true)}><EmojiEmotionsIcon /></IconButton>
           </Tooltip>
-          <Box sx={{ position: 'relative', flexGrow: 1 }}>
+          <Box sx={{ position: 'relative', flexGrow: 1 }} onPaste={handlePaste}>
             {mention && (
               <Paper
                 elevation={4}
