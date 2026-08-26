@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   LiveKitRoom,
   useRoomContext,
   useTracks,
   VideoTrack,
+  RoomAudioRenderer,
   isTrackReference,
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
@@ -38,9 +39,11 @@ interface Props {
   displayName: string
   onLeave: () => void
   onInviteChannel?: (roomName: string) => void
+  /** true when this user started the call (auto-announce to channel) */
+  initiator?: boolean
 }
 
-export default function LiveKitCall({ roomName, identity, displayName, onLeave, onInviteChannel }: Props) {
+export default function LiveKitCall({ roomName, identity, displayName, onLeave, onInviteChannel, initiator }: Props) {
   const [token, setToken] = useState<string | null>(null)
   const [tokenError, setTokenError] = useState<string | null>(null)
 
@@ -90,6 +93,7 @@ export default function LiveKitCall({ roomName, identity, displayName, onLeave, 
           roomName={roomName}
           onLeave={onLeave}
           onInviteChannel={onInviteChannel}
+          initiator={initiator}
         />
       </LiveKitRoom>
     </Box>
@@ -110,6 +114,7 @@ function CallView({
   roomName,
   onLeave,
   onInviteChannel,
+  initiator,
 }: Omit<Props, 'identity' | 'displayName'>) {
   const room = useRoomContext()
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], {
@@ -119,11 +124,19 @@ function CallView({
   const [camOn, setCamOn] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [connected, setConnected] = useState(room.state === 'connected')
+  const announcedRef = useRef(false)
   const [inviteAnchor, setInviteAnchor] = useState<HTMLElement | null>(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    const onConnected = () => setConnected(true)
+    const onConnected = () => {
+      setConnected(true)
+      // The call starter announces the call to the channel exactly once
+      if (initiator && !announcedRef.current) {
+        announcedRef.current = true
+        onInviteChannel?.(roomName)
+      }
+    }
     const onReconnecting = () => setConnected(false)
     room
       .on('connected', onConnected)
@@ -136,8 +149,13 @@ function CallView({
 
   async function toggleMic() {
     const next = !micOn
-    await room.localParticipant.setMicrophoneEnabled(next)
-    setMicOn(next)
+    try {
+      await room.localParticipant.setMicrophoneEnabled(next)
+      setMicOn(next)
+    } catch (e) {
+      console.error('[Call] mic error:', e)
+      alert('Gagal mengakses mikrofon. Izinkan akses mic untuk situs ini di pengaturan browser.')
+    }
   }
 
   async function toggleCam() {
@@ -175,6 +193,8 @@ function CallView({
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Plays all remote participants' microphone audio */}
+      <RoomAudioRenderer />
       <Box sx={{ px: 2.5, pt: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography sx={{ fontWeight: 700 }}># {roomName}</Typography>
         <Typography variant="caption" color={connected ? 'success.main' : 'warning.main'}>

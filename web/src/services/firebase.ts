@@ -969,3 +969,18 @@ export function subscribeToActiveRoomLocations(
     (err) => console.warn('[firebase] active locations query error:', err)
   )
 }
+
+/**
+ * Deactivate every active live location belonging to a user.
+ * Used on app mount (a refresh kills watchPosition but leaves the
+ * Firestore doc active) and before starting a new share.
+ */
+export async function stopMyActiveLocations(userId: string): Promise<void> {
+  const q = query(collection(db, COLLECTIONS.LIVE_LOCATIONS), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  for (const d of snap.docs) {
+    if (d.data().active === true) {
+      await updateDoc(d.ref, { active: false, updatedAt: Date.now() })
+    }
+  }
+}

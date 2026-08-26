@@ -36,7 +36,7 @@ import LockIcon from '@mui/icons-material/Lock'
 import type { Message, ChatRoom, ReplyTo } from '@/types'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
-import { sendMessage, joinRoom, startLiveLocation, updateLiveLocation, stopLiveLocation as fbStopLiveLocation } from '@/services/firebase'
+import { sendMessage, joinRoom, startLiveLocation, updateLiveLocation, stopLiveLocation as fbStopLiveLocation, stopMyActiveLocations } from '@/services/firebase'
 import { uploadFile } from '@/services/supabase'
 import { compressImageMaximum, isCompressibleImage } from '@/utils/imageCompression'
 import { DEFAULT_ROOM_ID } from '@/utils/const'
@@ -96,6 +96,7 @@ export default function ChatPage() {
   const [showStickers, setShowStickers] = useState(false)
   const [inCall, setInCall] = useState(false)
   const [callRoom, setCallRoom] = useState<string | null>(null)
+  const [isCallInitiator, setIsCallInitiator] = useState(false)
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [manageRoom, setManageRoom] = useState<ChatRoom | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -138,13 +139,19 @@ export default function ChatPage() {
   const roomName =
     currentRoom?.name ?? (currentRoomId === DEFAULT_ROOM_ID ? 'General' : currentRoomId)
 
-  useEffect(() => () => {
-    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
-  }, [])
+  useEffect(() => {
+    // A refresh kills watchPosition but leaves the Firestore doc active —
+    // clean up our stale shares on mount.
+    stopMyActiveLocations(user.id).catch(() => {})
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+    }
+  }, [user.id])
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get('call')
     if (requested) {
+      setIsCallInitiator(false)
       setCallRoom(requested)
       setInCall(true)
       // clean the URL so refresh doesn't rejoin unexpectedly
@@ -243,6 +250,7 @@ export default function ChatPage() {
     }
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        await stopMyActiveLocations(user.id).catch(() => {})
         const lat = pos.coords.latitude
         const lng = pos.coords.longitude
         const sent = await sendMessage(
@@ -353,7 +361,21 @@ export default function ChatPage() {
                 </Typography>
               </Box>
             )}
-            {message.isLiveLocation && message.location && <LiveLocationBubble message={message} />}
+            {message.isLiveLocation && message.location && (
+              <LiveLocationBubble
+                message={message}
+                isOwn={isOwn}
+                onStop={() => {
+                  fbStopLiveLocation(message.id).catch(() => {})
+                  if (liveMsgIdRef.current === message.id) {
+                    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+                    watchIdRef.current = null
+                    liveMsgIdRef.current = null
+                    setIsLiveTracking(false)
+                  }
+                }}
+              />
+            )}
             {!message.isLiveLocation && message.location && (
               <Box
                 component="a"
@@ -582,7 +604,13 @@ export default function ChatPage() {
             </IconButton>
           </Tooltip>
           <Tooltip title="Channel call">
-            <IconButton size="small" onClick={() => setInCall(true)}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                setIsCallInitiator(true)
+                setInCall(true)
+              }}
+            >
               <PhoneIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
@@ -823,6 +851,7 @@ export default function ChatPage() {
           roomName={callRoom ?? `channel-${currentRoomId}`}
           identity={`${user.id}-web-${Date.now()}`}
           displayName={`${user.animal} ${user.username}`}
+          initiator={isCallInitiator}
           onLeave={() => {
             setInCall(false)
             setCallRoom(null)
