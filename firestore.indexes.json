@@ -15,6 +15,14 @@
         { "fieldPath": "type", "order": "ASCENDING" },
         { "fieldPath": "members", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "liveLocations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roomId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

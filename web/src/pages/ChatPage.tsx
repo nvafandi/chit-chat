@@ -15,6 +15,9 @@ import {
   Paper,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
+import MenuIcon from '@mui/icons-material/Menu'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { useTheme as useMuiTheme } from '@mui/material/styles'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions'
 import MyLocationIcon from '@mui/icons-material/MyLocation'
@@ -64,6 +67,12 @@ import {
 import StickerView from '@/components/StickerView'
 import StickerPicker from '@/components/StickerPicker'
 import LiveKitCall from '@/components/LiveKitCall'
+import EmojiPicker from '@/components/EmojiPicker'
+import ImageViewer from '@/components/ImageViewer'
+import LiveRoomMap from '@/components/LiveRoomMap'
+import { subscribeToActiveRoomLocations } from '@/services/firebase'
+import MapIcon from '@mui/icons-material/Map'
+import { useThemeStore } from '@/stores/themeStore'
 
 interface PendingFile {
   file: File
@@ -95,6 +104,20 @@ export default function ChatPage() {
   const [notifOn, setNotifOn] = useState(isNotificationsEnabled())
   const [replyingTo, setReplyingTo] = useState<ReplyTo | null>(null)
   const [isDragover, setIsDragover] = useState(false)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
+  const [emojiAnchor, setEmojiAnchor] = useState<HTMLElement | null>(null)
+  const [showRoomMap, setShowRoomMap] = useState(false)
+  const muiTheme = useMuiTheme()
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'))
+  const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia('(max-width: 900px)').matches)
+  const [activeSharers, setActiveSharers] = useState(0)
+
+  useEffect(() => {
+    const unsub = subscribeToActiveRoomLocations(currentRoomId, (locs) =>
+      setActiveSharers(locs.length)
+    )
+    return unsub
+  }, [currentRoomId])
 
   useEffect(() => {
     if (!user) return
@@ -416,7 +439,7 @@ export default function ChatPage() {
               key={i}
               url={att.url}
               alt={att.name}
-              onClick={() => window.open(att.url, '_blank')}
+              onClick={() => setViewerUrl(att.url)}
             />
           ) : (
             <Box
@@ -437,11 +460,21 @@ export default function ChatPage() {
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Channel sidebar */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'persistent'}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         sx={{
-          width: DRAWER_WIDTH,
+          width: sidebarOpen ? DRAWER_WIDTH : 0,
           flexShrink: 0,
-          '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box', bgcolor: '#2b2d31', borderRight: '1px solid rgba(255,255,255,0.06)' },
+          overflow: 'hidden',
+          transition: 'width 0.2s ease',
+          '& .MuiDrawer-paper': {
+            width: DRAWER_WIDTH,
+            boxSizing: 'border-box',
+            bgcolor: '#2b2d31',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+            ...(isMobile ? {} : { position: 'relative' }),
+          },
         }}
       >
         <Box sx={{ p: 2, color: "#f2f3f5", borderBottom: '1px solid rgba(0,0,0,0.35)' }}>
@@ -499,6 +532,11 @@ export default function ChatPage() {
       {/* Main area */}
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <Box sx={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1, px: 2, bgcolor: '#313338', borderBottom: '1px solid rgba(0,0,0,0.35)' }}>
+          <Tooltip title={sidebarOpen && !isMobile ? 'Sembunyikan sidebar' : 'Tampilkan sidebar'}>
+            <IconButton size="small" onClick={() => setSidebarOpen((v) => !v)}>
+              <MenuIcon sx={{ fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
           <Typography sx={{ color: '#949ba4' }}>#</Typography>
           <Typography noWrap sx={{ fontWeight: 600, color: "#f2f3f5" }}>{roomName}</Typography>
           <Badge badgeContent={users.length} color="primary" sx={{ ml: 1 }}>
@@ -525,11 +563,19 @@ export default function ChatPage() {
               {notifOn ? <NotificationsIcon sx={{ fontSize: 18 }} /> : <NotificationsOffIcon sx={{ fontSize: 18 }} />}
             </IconButton>
           </Tooltip>
+          <Tooltip title="Peta live location gabungan">
+            <IconButton size="small" onClick={() => setShowRoomMap(true)}>
+              <Badge badgeContent={activeSharers} color="success" slotProps={{ badge: { style: { fontSize: 9, height: 15, minWidth: 15 } } }}>
+                <MapIcon sx={{ fontSize: 18 }} />
+              </Badge>
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Channel call">
             <IconButton size="small" onClick={() => setInCall(true)}>
               <PhoneIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
+          <ThemeToggle />
         </Box>
 
         {pinnedMessages.length > 0 && (
@@ -744,6 +790,21 @@ export default function ChatPage() {
         />
       )}
 
+      <EmojiPicker
+        open={!!emojiAnchor}
+        anchorEl={emojiAnchor}
+        onClose={() => setEmojiAnchor(null)}
+        onSelect={(emoji) => {
+          setInput((v) => v + emoji)
+          setEmojiAnchor(null)
+          inputElRef.current?.focus()
+        }}
+      />
+
+      {viewerUrl && <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} />}
+
+      {showRoomMap && <LiveRoomMap roomId={currentRoomId} onClose={() => setShowRoomMap(false)} />}
+
       <StickerPicker open={showStickers} onClose={() => setShowStickers(false)} onSelect={handleSelectSticker} />
 
       {inCall && (
@@ -755,5 +816,17 @@ export default function ChatPage() {
         />
       )}
     </Box>
+  )
+}
+
+function ThemeToggle() {
+  const mode = useThemeStore((s) => s.mode)
+  const toggle = useThemeStore((s) => s.toggle)
+  return (
+    <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
+      <IconButton size="small" onClick={toggle}>
+        {mode === 'dark' ? '☀️' : '🌙'}
+      </IconButton>
+    </Tooltip>
   )
 }
