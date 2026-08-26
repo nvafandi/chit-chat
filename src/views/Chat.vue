@@ -12,7 +12,7 @@
 
   <div class="chat-container" :class="{ 'light-mode': !isDark }">
     <!-- Channel Sidebar (Discord style) -->
-    <aside class="channel-sidebar" :class="{ open: isSidebarOpen }">
+    <aside class="channel-sidebar" :class="{ open: isSidebarOpen, hidden: !isSidebarVisible }">
       <div class="sidebar-server-header">
         <span class="server-name">CHIT CHuT</span>
         <v-icon size="16" class="server-chevron">mdi-chevron-down</v-icon>
@@ -77,7 +77,7 @@
           icon
           size="small"
           variant="text"
-          @click="isSidebarOpen = true"
+          @click="toggleSidebar"
         >
           <v-icon>mdi-menu</v-icon>
         </v-btn>
@@ -344,6 +344,13 @@
                         :content="message.content"
                         :sticker-data="message.stickerData"
                       />
+                      <!-- Live Location Display -->
+                      <LiveLocationMessage
+                        v-else-if="message.isLiveLocation && message.location"
+                        :location="message.location"
+                        :message-id="message.id"
+                        :is-own-message="message.userId === authStore.user?.id"
+                      />
                       <!-- Shared Location Display -->
                       <LocationMessage
                         v-else-if="message.location"
@@ -577,11 +584,28 @@
                     color="primary"
                     class="location-btn"
                     @click="handleShareLocation"
-                    :disabled="isLoading || isCompressing || isSharingLocation"
+                    :disabled="isLoading || isCompressing || isSharingLocation || isLiveTracking"
                     :loading="isSharingLocation"
                     v-bind="props"
                   >
                     <v-icon>mdi-map-marker</v-icon>
+                  </v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip :text="isLiveTracking ? 'Stop Live Location' : 'Live Location'">
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    icon
+                    size="default"
+                    :variant="isLiveTracking ? 'flat' : 'tonal'"
+                    :color="isLiveTracking ? 'success' : 'primary'"
+                    class="location-btn live-toggle"
+                    :class="{ 'is-live': isLiveTracking }"
+                    @click="toggleLiveLocation"
+                    :disabled="isLoading || isCompressing || isSharingLocation"
+                    v-bind="props"
+                  >
+                    <v-icon>{{ isLiveTracking ? 'mdi-crosshairs-gps' : 'mdi-crosshairs' }}</v-icon>
                   </v-btn>
                 </template>
               </v-tooltip>
@@ -962,6 +986,9 @@ import {
   addGroupMembers,
   removeGroupMember,
   backfillLegacyMessageRooms,
+  startLiveLocation,
+  updateLiveLocation,
+  stopLiveLocation as fbStopLiveLocation,
 } from '@/services/firebase'
 import { uploadImage, uploadFile, resolveChunkedFile } from '@/services/supabase'
 import { performFileCleanup, schedulePeriodicCleanup } from '@/services/fileCleanup'
@@ -1004,6 +1031,7 @@ import StickerMessage from '@/components/StickerMessage.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import ResolvedImage from '@/components/ResolvedImage.vue'
 import LocationMessage from '@/components/LocationMessage.vue'
+import LiveLocationMessage from '@/components/LiveLocationMessage.vue'
 import type { Message, ReplyTo, User, ChatRoom, MemberInfo, RoomType } from '@/types'
 import type { CompressionResult } from '@/utils/imageCompression'
 import type { Sticker } from '@/utils/stickers'
@@ -1015,6 +1043,15 @@ const theme = useTheme()
 
 const isDark = ref<boolean>(false)
 const isSidebarOpen = ref(false)
+const isSidebarVisible = ref(true)
+
+function toggleSidebar() {
+  if (window.innerWidth <= 900) {
+    isSidebarOpen.value = !isSidebarOpen.value
+  } else {
+    isSidebarVisible.value = !isSidebarVisible.value
+  }
+}
 const callActive = ref(false)
 const callUrl = ref('')
 
@@ -1125,6 +1162,15 @@ const pendingLocation = ref<{
   longitude: number
   label?: string
 } | null>(null)
+
+// ============================================================================
+// LIVE LOCATION STATE
+// ============================================================================
+const isLiveTracking = ref(false)
+const liveLocationMessageId = ref<string | null>(null)
+let watchPositionId: number | null = null
+let lastLiveLocationUpdate = 0
+const LIVE_LOCATION_THROTTLE_MS = 10_000 // 10 seconds
 
 // ============================================================================
 // CHANNELS STATE
@@ -2011,6 +2057,103 @@ async function handleShareLocation() {
   } finally {
     isSharingLocation.value = false
   }
+}
+
+// ============================================================================
+// LIVE LOCATION FUNCTIONS
+// ============================================================================
+
+function toggleLiveLocation() {
+  if (isLiveTracking.value) {
+    stopLiveTracking()
+  } else {
+    startLiveTracking()
+  }
+}
+
+async function startLiveTracking() {
+  if (!authStore.user || !chatStore.currentRoomId) return
+
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    error.value = 'Geolocation tidak didukung oleh browser ini.'
+    return
+  }
+
+  error.value = null
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 0,
+      })
+    })
+
+    const lat = position.coords.latitude
+    const lng = position.coords.longitude
+
+    const sentMessage = await sendMessage(
+      authStore.user.id,
+      authStore.user.username,
+      authStore.user.animal,
+      '📍 Live Location',
+      undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined,
+      { latitude: lat, longitude: lng },
+      chatStore.currentRoomId,
+      true,
+    )
+
+    await startLiveLocation(sentMessage.id, chatStore.currentRoomId, authStore.user.id, authStore.user.username, authStore.user.animal, lat, lng)
+
+    isLiveTracking.value = true
+    liveLocationMessageId.value = sentMessage.id
+    lastLiveLocationUpdate = Date.now()
+
+    watchPositionId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const now = Date.now()
+        if (now - lastLiveLocationUpdate < LIVE_LOCATION_THROTTLE_MS) return
+        lastLiveLocationUpdate = now
+
+        try {
+          await updateLiveLocation(sentMessage.id, pos.coords.latitude, pos.coords.longitude)
+        } catch (e) {
+          console.warn('[Chat] Failed to update live location:', e)
+        }
+      },
+      (err) => {
+        console.error('[Chat] watchPosition error:', err)
+      },
+      { enableHighAccuracy: true, maximumAge: 0 }
+    )
+  } catch (err) {
+    const geolocErr = err as GeolocationPositionError
+    console.error('[Chat] Error starting live location:', err)
+    error.value = GEOCODE_ERROR_MESSAGES[geolocErr?.code] ?? 'Gagal memulai live location.'
+    isLiveTracking.value = false
+  }
+}
+
+async function stopLiveTracking() {
+  if (watchPositionId !== null) {
+    navigator.geolocation.clearWatch(watchPositionId)
+    watchPositionId = null
+  }
+
+  if (liveLocationMessageId.value) {
+    try {
+      await fbStopLiveLocation(liveLocationMessageId.value)
+    } catch (e) {
+      console.warn('[Chat] Failed to stop live location:', e)
+    }
+  }
+
+  isLiveTracking.value = false
+  liveLocationMessageId.value = null
+  lastLiveLocationUpdate = 0
 }
 
 async function handleSendMessage() {
@@ -3091,6 +3234,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  stopLiveTracking()
   chatStore.unsubscribeFromUpdates()
 
   if (unsubscribeRooms) {
@@ -3998,7 +4142,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 2rem 2.5rem 1.5rem 2.5rem;
+  padding: 1.5rem 1rem 1rem 1rem;
   flex: 1;
 }
 
@@ -4219,7 +4363,7 @@ onUnmounted(() => {
 }
 
 .input-section {
-  padding: 0.4rem 0.75rem 0.6rem;
+  padding: 0.75rem 1rem 1rem;
   background-color: var(--bg-primary);
   border-top: 2px solid var(--border-accent);
   border-radius: 16px 16px 0 0;
@@ -4476,6 +4620,17 @@ onUnmounted(() => {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+/* Live Location Toggle - pulsing when active */
+:deep(.live-toggle.is-live) {
+  animation: live-pulse 1.5s ease-in-out infinite !important;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(76, 175, 80, 0.3)) !important;
+}
+
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(76, 175, 80, 0); }
 }
 
 :deep(.sticker-btn:hover:not(:disabled)),
@@ -5610,6 +5765,13 @@ onUnmounted(() => {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   height: 100vh;
   z-index: 1001;
+  transition: width 0.2s ease, transform 0.2s ease;
+}
+
+.channel-sidebar.hidden {
+  width: 0;
+  overflow: hidden;
+  border-right: none;
 }
 
 .sidebar-server-header {
@@ -5779,7 +5941,7 @@ onUnmounted(() => {
 }
 
 .sidebar-hamburger {
-  display: none;
+  display: inline-flex;
   color: #b5bac1 !important;
 }
 
@@ -5933,7 +6095,7 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 14px;
   width: 100%;
-  padding: 6px 24px 6px 24px;
+  padding: 6px 48px 6px 16px;
   position: relative;
   transition: background 0.1s;
 }
@@ -6001,10 +6163,11 @@ onUnmounted(() => {
 }
 
 /* Hover actions — Discord style floating toolbar */
+/* Anchored to the bubble (message-card), not the full-width row */
 .message-row .action-buttons {
   position: absolute;
-  top: -14px;
-  right: 24px;
+  top: -13px;
+  right: 10px;
   background: #313338;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -6123,10 +6286,6 @@ onUnmounted(() => {
     transform: translateX(0);
   }
 
-  .sidebar-hamburger {
-    display: inline-flex;
-  }
-
   .header-search :deep(.search-field) {
     width: 150px;
   }
@@ -6144,6 +6303,148 @@ onUnmounted(() => {
     width: 32px;
     height: 32px;
     font-size: 16px;
+  }
+
+  /* Safe area padding for notched phones */
+  .channel-header {
+    padding: 0 12px;
+    height: 48px;
+  }
+
+  .input-section {
+    padding: 0.4rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* Action buttons: minimum 44px touch targets */
+  :deep(.upload-btn),
+  :deep(.location-btn),
+  :deep(.live-toggle),
+  :deep(.send-btn) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  :deep(.sticker-btn) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  /* Input text area */
+  .message-input-wrapper {
+    min-height: 40px;
+    border-radius: 20px;
+  }
+
+  :deep(.message-input textarea) {
+    font-size: 16px !important; /* Prevent iOS zoom on focus */
+    padding: 8px 12px !important;
+  }
+
+  /* Messages */
+  .messages-list {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .message-content-container {
+    max-width: 88%;
+  }
+
+  .message-card {
+    min-width: 80px;
+  }
+
+  /* Chat container fill remaining space */
+  .chat-main {
+    min-width: 0;
+  }
+
+  .chat-container {
+    flex-direction: column;
+  }
+
+  /* Hamburger always visible */
+  .sidebar-hamburger {
+    display: inline-flex !important;
+  }
+
+  /* Reply box */
+  .quoted-reply-box {
+    padding: 6px 8px;
+  }
+
+  .quoted-reply-content {
+    gap: 6px;
+  }
+
+  /* File preview on mobile */
+  .file-preview-card {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  /* Empty state */
+  .empty-state {
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .empty-state h3 {
+    font-size: 1rem;
+  }
+
+  .empty-state p {
+    font-size: 0.85rem;
+  }
+}
+
+/* Small phones: <= 380px */
+@media (max-width: 380px) {
+  .channel-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .channel-title {
+    font-size: 14px;
+  }
+
+  .header-icon-btn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  :deep(.upload-btn),
+  :deep(.location-btn),
+  :deep(.live-toggle),
+  :deep(.send-btn) {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .message-content-container {
+    max-width: 92%;
+  }
+
+  .message-row {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+
+  .row-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  .messages-list {
+    padding: 0.5rem 0.35rem;
   }
 }
 </style>

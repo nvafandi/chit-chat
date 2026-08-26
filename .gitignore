@@ -71,3 +71,8 @@ Thumbs.db
 
 # TypeScript build info
 *.tsbuildinfo
+
+# React Native / Expo
+mobile/dist/
+mobile/.expo/
+mobile/node_modules/
