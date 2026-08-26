@@ -384,10 +384,7 @@ export default function ChatPage() {
           <Typography sx={{ px: 2, pt: 2, pb: 1, fontSize: 11, letterSpacing: 1.5, color: '#949ba4', textTransform: 'uppercase' }}>
             Channels
           </Typography>
-          {(rooms.length > 0
-            ? rooms
-            : ([{ id: DEFAULT_ROOM_ID, name: 'General', type: 'room' }] as ChatRoom[])
-          ).map((room) => (
+          {rooms.map((room) => (
             <ListItemButton
               key={room.id}
               selected={room.id === currentRoomId}
