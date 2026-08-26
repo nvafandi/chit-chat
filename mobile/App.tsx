@@ -26,7 +26,7 @@ export default function App() {
 
   useEffect(() => {
     if (user) {
-      connect();
+      connect(user.id);
       return () => disconnect();
     }
   }, [user, connect, disconnect]);
