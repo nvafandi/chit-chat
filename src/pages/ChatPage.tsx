@@ -339,6 +339,41 @@ export default function ChatPage() {
 
   function renderMessage(message: Message) {
     const isOwn = message.userId === user.id
+
+    // Show deleted message placeholder
+    if (message.hidden) {
+      return (
+        <Box key={message.id} id={`msg-${message.id}`} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
+          <Box sx={{ maxWidth: '72%', display: 'flex', gap: 1, alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
+            {!isOwn && (
+              <Avatar
+                src={users.find((u) => u.id === message.userId)?.photoUrl}
+                sx={{ width: 30, height: 30, fontSize: 15, bgcolor: 'background.paper' }}
+              >
+                {message.animal ?? '🐾'}
+              </Avatar>
+            )}
+            <Box sx={{ bgcolor: isOwn ? 'primary.main' : 'background.paper', color: isOwn ? '#fff' : 'text.primary', borderRadius: 2.5, borderBottomRightRadius: isOwn ? 0.5 : 2.5, borderTopLeftRadius: isOwn ? 2.5 : 0.5, px: 1.5, py: 1 }}>
+              {!isOwn && (
+                <Typography variant="caption" sx={{ color: '#c79fff', fontWeight: 700, display: 'block' }}>
+                  {message.animal} {message.username}
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, opacity: 0.6, fontStyle: 'italic' }}>
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                <Typography variant="body2">Pesan ini telah dihapus</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5, mt: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.55, fontSize: 10 }}>
+                  {new Date(message.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      )
+    }
+
     if (isStickerMessage(message.content) || message.stickerData) {
       return (
         <Box sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 1 }}>
@@ -476,7 +511,7 @@ export default function ChatPage() {
             >
               <PushPinIcon sx={{ fontSize: 15, transform: message.pinned ? 'rotate(45deg)' : 'none' }} color={message.pinned ? 'warning' : 'inherit'} />
             </IconButton>
-            {message.userId === user.id && (
+            {message.userId === user.id && !message.hidden && (
               <IconButton size="small" title="Hapus pesan" onClick={() => hideMessage(message.id)}>
                 <DeleteOutlineIcon sx={{ fontSize: 15 }} />
               </IconButton>
