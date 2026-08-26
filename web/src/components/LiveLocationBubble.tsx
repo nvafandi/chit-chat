@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Box, Typography } from '@mui/material'
+import { Box, Typography, Button } from '@mui/material'
 import { subscribeToLiveLocation } from '@/services/firebase'
 import type { Message } from '@/types'
 
@@ -11,7 +11,13 @@ const ICON = L.divIcon({
   iconAnchor: [10, 10],
 })
 
-export default function LiveLocationBubble({ message }: { message: Message }) {
+interface Props {
+  message: Message
+  isOwn?: boolean
+  onStop?: () => void
+}
+
+export default function LiveLocationBubble({ message, isOwn, onStop }: Props) {
   const loc = message.location!
   const mapEl = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -76,9 +82,23 @@ export default function LiveLocationBubble({ message }: { message: Message }) {
             bgcolor: active === false ? '#757575' : '#4caf50',
           }}
         />
-        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, flexGrow: 1 }}>
           {active === false ? 'Live Location berakhir' : 'Live Location'}
         </Typography>
+        {isOwn && active !== false && onStop && (
+          <Button
+            size="small"
+            variant="contained"
+            color="error"
+            onClick={(e) => {
+              e.stopPropagation()
+              onStop()
+            }}
+            sx={{ minWidth: 0, px: 1, py: 0.1, fontSize: 10 }}
+          >
+            Stop
+          </Button>
+        )}
       </Box>
       <Box ref={mapEl} sx={{ height: 140, width: '100%', bgcolor: 'action.hover' }} />
       <Typography
