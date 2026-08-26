@@ -354,7 +354,7 @@ export default function ChatPage() {
       )
     }
     return (
-      <Box key={message.id} sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
+      <Box key={message.id} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
         <Box sx={{ maxWidth: '72%', display: 'flex', gap: 1, alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
           {!isOwn && (
             <Avatar
@@ -428,7 +428,7 @@ export default function ChatPage() {
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
-              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0 }}>
+              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0, wordBreak: 'break-all', overflowWrap: 'break-word' }}>
                 <RichContent content={message.content} isOwn={isOwn} />
               </Box>
             )}
@@ -448,8 +448,6 @@ export default function ChatPage() {
               opacity: 0,
               transition: 'opacity 0.15s',
               alignSelf: 'center',
-              '&:hover': { opacity: 1 },
-              // parent hover reveal
             }}
             className="msg-actions"
           >
