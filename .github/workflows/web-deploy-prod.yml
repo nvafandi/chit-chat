@@ -1,11 +1,23 @@
-name: Deploy to Firebase Hosting
+name: Web Deploy (Production)
 
 on:
   pull_request:
     branches: [master]
     types: [opened, synchronize, reopened]
+    paths:
+      - 'web/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - '.github/workflows/web-deploy-prod.yml'
   push:
     branches: [master]
+    paths:
+      - 'web/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - '.github/workflows/web-deploy-prod.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

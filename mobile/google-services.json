@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "88271262769",
+    "project_id": "chitchut-2b9e2-5000a",
+    "storage_bucket": "chitchut-2b9e2-5000a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88271262769:android:fb22bcd246d85f541af110",
+        "android_client_info": {
+          "package_name": "com.chitchut.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "88271262769-jn4ro4r0l04n5korbcf6burivtof93mb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyqyWA_auRo67HwJ_3zeyeMDxyCjYCTgM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "88271262769-jn4ro4r0l04n5korbcf6burivtof93mb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
