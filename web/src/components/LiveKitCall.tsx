@@ -142,6 +142,9 @@ function CallView({
       .on('connected', onConnected)
       .on('reconnecting', onReconnecting)
       .on('reconnected', onConnected)
+    // Race guard: on fast connections the 'connected' event fires before
+    // these listeners attach — check current state explicitly.
+    if (room.state === 'connected') onConnected()
     return () => {
       room.off('connected', onConnected).off('reconnecting', onReconnecting).off('reconnected', onConnected)
     }
