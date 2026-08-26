@@ -24,3 +24,29 @@ body {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Live location marker (Leaflet) */
+.live-marker {
+  background: transparent !important;
+  border: none !important;
+}
+.live-marker-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4caf50;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+.live-marker-pulse {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: rgba(76, 175, 80, 0.25);
+  animation: live-pulse-ring 1.5s infinite;
+}
+@keyframes live-pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}

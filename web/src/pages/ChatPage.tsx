@@ -39,6 +39,7 @@ import { formatAsSticker, isStickerMessage, type Sticker as StickerItem } from '
 import MessageList from '@/components/MessageList'
 import CreateChannelDialog from '@/components/CreateChannelDialog'
 import ManageMembersDialog from '@/components/ManageMembersDialog'
+import LiveLocationBubble from '@/components/LiveLocationBubble'
 import {
   pinMessage,
   unpinMessage,
@@ -268,8 +269,22 @@ export default function ChatPage() {
                 {message.animal} {message.username}
               </Typography>
             )}
-            {message.isLiveLocation && message.location && (
-              <Box component="span" sx={{ mb: 0.5, display: 'block' }}>📍 Live Location aktif</Box>
+            {message.isLiveLocation && message.location && <LiveLocationBubble message={message} />}
+            {!message.isLiveLocation && message.location && (
+              <Box
+                component="a"
+                href={`https://www.google.com/maps/search/?api=1&query=${message.location.latitude},${message.location.longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                sx={{ display: 'block', width: 240, borderRadius: 1.5, overflow: 'hidden', mb: 0.5, textDecoration: 'none' }}
+              >
+                <Box
+                  component="iframe"
+                  title="Lokasi"
+                  src={`https://maps.google.com/maps?q=${message.location.latitude},${message.location.longitude}&z=15&output=embed`}
+                  sx={{ width: 240, height: 140, border: 0, display: 'block', pointerEvents: 'none' }}
+                />
+              </Box>
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
