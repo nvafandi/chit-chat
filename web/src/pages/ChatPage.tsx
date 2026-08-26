@@ -464,14 +464,15 @@ export default function ChatPage() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         sx={{
-          width: DRAWER_WIDTH,
+          width: sidebarOpen ? DRAWER_WIDTH : 0,
           flexShrink: 0,
+          overflow: 'hidden',
+          transition: 'width 0.2s ease',
           '& .MuiDrawer-paper': {
             width: DRAWER_WIDTH,
             boxSizing: 'border-box',
             bgcolor: '#2b2d31',
             borderRight: '1px solid rgba(255,255,255,0.06)',
-            transition: 'width 0.2s ease',
             ...(isMobile ? {} : { position: 'relative' }),
           },
         }}
