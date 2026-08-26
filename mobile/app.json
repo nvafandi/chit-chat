@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "CHIT CHuT",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,8 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bitcode": false
+      "bitcode": false,
+      "bundleIdentifier": "com.chitchut.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.mobile",
+      "package": "com.chitchut.app",
       "permissions": [
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CAMERA",

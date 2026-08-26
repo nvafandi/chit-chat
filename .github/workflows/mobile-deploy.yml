@@ -1,0 +1,55 @@
+name: Mobile Android Build & Distribute
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: 'Release notes'
+        default: 'Build terbaru CHIT CHuT Android'
+  push:
+    branches: [staging]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-deploy.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-distribute:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native project (CNG)
+        run: npx expo prebuild -p android --clean --no-install
+
+      - name: Build debug APK
+        run: cd android && ./gradlew assembleDebug --no-daemon
+
+      - name: Distribute to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: 1:88271262769:android:fb22bcd246d85f541af110
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: testers
+          file: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          releaseNotes: ${{ github.event.inputs.release_notes || 'Build terbaru CHIT CHuT Android' }}
