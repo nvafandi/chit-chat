@@ -9,7 +9,12 @@ on:
   push:
     branches: [mobile]
     paths:
-      - 'mobile/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'app.json'
+      - 'eas.json'
+      - 'index.ts'
       - '.github/workflows/mobile-deploy.yml'
 
 concurrency:
@@ -19,17 +24,12 @@ concurrency:
 jobs:
   build-and-distribute:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
+          node-version: 22
 
       - uses: actions/setup-java@v4
         with:
@@ -56,5 +56,5 @@ jobs:
           appId: 1:88271262769:android:fb22bcd246d85f541af110
           serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           groups: testers
-          file: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          file: android/app/build/outputs/apk/debug/app-debug.apk
           releaseNotes: ${{ github.event.inputs.release_notes || 'Build terbaru CHIT CHuT Android' }}
