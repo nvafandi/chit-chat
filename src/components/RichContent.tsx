@@ -1,4 +1,4 @@
-import { Box, Typography, Button, Paper } from '@mui/material'
+import { Box, Typography, Button, Paper, IconButton, Tooltip } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { detectContentType, hasFormattedContent, formatJSON } from '@/utils/jsonFormatter'
 import { isCurlRequest, extractCurlFromText } from '@/utils/curlFormatter'
@@ -43,9 +43,22 @@ export default function RichContent({ content, isOwn }: { content: string; isOwn
   }
 
   return (
-    <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
-      {content}
-    </Typography>
+    <Box sx={{ position: 'relative' }}>
+      <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', pr: 3 }}>
+        {content}
+      </Typography>
+      <Tooltip title="Salin teks">
+        <IconButton
+          size="small"
+          onClick={async () => {
+            try { await navigator.clipboard.writeText(content) } catch {}
+          }}
+          sx={{ position: 'absolute', top: -4, right: -4, opacity: 0.5, '&:hover': { opacity: 1 } }}
+        >
+          <ContentCopyIcon sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Tooltip>
+    </Box>
   )
 }
 
@@ -73,7 +86,7 @@ function CodeCard({ label, code, isOwn }: { label: string; code: string; isOwn: 
           Copy
         </Button>
       </Box>
-      <Box component="pre" sx={{ m: 0, p: 1, overflowX: 'auto', fontSize: 12, fontFamily: 'monospace', color: isOwn ? '#fff' : '#e2e2e2' }}>
+      <Box component="pre" sx={{ m: 0, p: 1, overflowX: 'auto', fontSize: 12, fontFamily: 'monospace', color: isOwn ? '#fff' : '#e2e2e2', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
         {code}
       </Box>
     </Paper>

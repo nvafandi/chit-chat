@@ -380,7 +380,9 @@ export async function getMessagesBefore(beforeCursor: Message, roomId: string = 
     )
     const querySnapshot = await getDocs(q)
     // Query newest-first for efficiency, then reverse for chronological UI rendering.
-    return querySnapshot.docs.map((doc) => doc.data() as Message).reverse()
+    return querySnapshot.docs
+      .map((doc) => doc.data() as Message)
+      .reverse()
   } catch (error) {
     console.error('Error getting messages before cursor:', error)
     throw error
@@ -398,7 +400,10 @@ export function subscribeToMessages(callback: (messages: Message[]) => void, roo
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       // Keep chronological order in UI while the query tracks latest messages.
-      const messages = querySnapshot.docs.map((doc) => doc.data() as Message).reverse()
+      // Don't filter hidden messages here - let UI show them as "deleted"
+      const messages = querySnapshot.docs
+        .map((doc) => doc.data() as Message)
+        .reverse()
       callback(messages)
     })
 

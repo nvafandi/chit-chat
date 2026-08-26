@@ -19,6 +19,7 @@ import {
   Paper,
   Popover,
   Stack,
+  Snackbar,
 } from '@mui/material'
 import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
@@ -46,6 +47,7 @@ interface Props {
 export default function LiveKitCall({ roomName, identity, displayName, onLeave, onInviteChannel, initiator }: Props) {
   const [token, setToken] = useState<string | null>(null)
   const [tokenError, setTokenError] = useState<string | null>(null)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   useEffect(() => {
     generateLiveKitToken({ identity, name: displayName, room: roomName })
@@ -85,8 +87,22 @@ export default function LiveKitCall({ roomName, identity, displayName, onLeave, 
         options={{ adaptiveStream: true, dynacast: true }}
         audio
         video={false}
-        onDisconnected={onLeave}
-        onError={(err) => console.error('[Call] error:', err)}
+        onDisconnected={(reason) => {
+          onLeave()
+          if (reason) {
+            const msg = reason.toLowerCase()
+            if (msg.includes('websocket') || msg.includes('connection') || msg.includes('timeout') || msg.includes('blocked')) {
+              setConnectionError('Koneksi diblokir (mungkin Zscaler/firewall). Coba nonaktifkan VPN/Proxy atau gunakan hotspot HP.')
+            }
+          }
+        }}
+        onError={(err) => {
+          console.error('[Call] error:', err)
+          const msg = err.message?.toLowerCase() || ''
+          if (msg.includes('websocket') || msg.includes('connection') || msg.includes('timeout') || msg.includes('blocked') || msg.includes('ice') || msg.includes('turn')) {
+            setConnectionError('Koneksi diblokir (mungkin Zscaler/firewall). Coba nonaktifkan VPN/Proxy atau gunakan hotspot HP.')
+          }
+        }}
         style={{ height: '100%' }}
       >
         <CallView
@@ -95,6 +111,20 @@ export default function LiveKitCall({ roomName, identity, displayName, onLeave, 
           onInviteChannel={onInviteChannel}
           initiator={initiator}
         />
+        {connectionError && (
+          <Snackbar
+            open
+            autoHideDuration={0}
+            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          >
+            <Alert severity="error" variant="filled" onClose={() => setConnectionError(null)} sx={{ maxWidth: 480 }}>
+              <Typography>{connectionError}</Typography>
+              <Button size="small" color="inherit" onClick={() => window.location.reload()} style={{ marginLeft: 8 }}>
+                Refresh
+              </Button>
+            </Alert>
+          </Snackbar>
+        )}
       </LiveKitRoom>
     </Box>
   )

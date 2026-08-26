@@ -76,3 +76,15 @@ body {
 .live-dist-popup .leaflet-popup-tip {
   background: rgba(25, 118, 210, 0.9);
 }
+
+/* Message content word break */
+.msg-content {
+  word-break: break-all;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Show action buttons on message hover */
+.msg-row:hover .msg-actions {
+  opacity: 1;
+}

@@ -13,6 +13,7 @@ import {
   Tooltip,
   Badge,
   Paper,
+  LinearProgress,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import MenuIcon from '@mui/icons-material/Menu'
@@ -93,6 +94,9 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set())
+  const [downloadProgress, setDownloadProgress] = useState<Map<string, number>>(new Map())
   const [showStickers, setShowStickers] = useState(false)
   const [inCall, setInCall] = useState(false)
   const [callRoom, setCallRoom] = useState<string | null>(null)
@@ -177,15 +181,20 @@ export default function ChatPage() {
     if (files.length > 0) {
       try {
         setIsUploading(true)
+        setUploadProgress(0)
         attachments = await Promise.all(
-          files.map(async (f) => {
+          files.map(async (f, idx) => {
             let blob: Blob = f.file
             if (f.isImage && isCompressibleImage(f.file)) {
               try {
                 blob = (await compressImageMaximum(f.file)).blob
               } catch { /* fall back to original */ }
             }
-            const url = await uploadFile(blob, `${Date.now()}-${f.name}`)
+            const url = await uploadFile(blob, `${Date.now()}-${f.name}`, 'chat-images', (p) => {
+              const fileWeight = 100 / files.length
+              const baseProgress = idx * fileWeight
+              setUploadProgress(Math.min(100, Math.round(baseProgress + (p * fileWeight) / 100)))
+            })
             if (!url) throw new Error(`Upload gagal: ${f.name}`)
             return {
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -200,9 +209,11 @@ export default function ChatPage() {
       } catch (e) {
         console.error('[Chat] upload failed:', e)
         setIsUploading(false)
+        setUploadProgress(0)
         return
       }
       setIsUploading(false)
+      setUploadProgress(0)
       setPendingFiles([])
       setCaption('')
     }
@@ -328,6 +339,41 @@ export default function ChatPage() {
 
   function renderMessage(message: Message) {
     const isOwn = message.userId === user.id
+
+    // Show deleted message placeholder
+    if (message.hidden) {
+      return (
+        <Box key={message.id} id={`msg-${message.id}`} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
+          <Box sx={{ maxWidth: '72%', display: 'flex', gap: 1, alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
+            {!isOwn && (
+              <Avatar
+                src={users.find((u) => u.id === message.userId)?.photoUrl}
+                sx={{ width: 30, height: 30, fontSize: 15, bgcolor: 'background.paper' }}
+              >
+                {message.animal ?? '🐾'}
+              </Avatar>
+            )}
+            <Box sx={{ bgcolor: isOwn ? 'primary.main' : 'background.paper', color: isOwn ? '#fff' : 'text.primary', borderRadius: 2.5, borderBottomRightRadius: isOwn ? 0.5 : 2.5, borderTopLeftRadius: isOwn ? 2.5 : 0.5, px: 1.5, py: 1 }}>
+              {!isOwn && (
+                <Typography variant="caption" sx={{ color: '#c79fff', fontWeight: 700, display: 'block' }}>
+                  {message.animal} {message.username}
+                </Typography>
+              )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, opacity: 0.6, fontStyle: 'italic' }}>
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                <Typography variant="body2">Pesan ini telah dihapus</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5, mt: 0.5 }}>
+                <Typography variant="caption" sx={{ opacity: 0.55, fontSize: 10 }}>
+                  {new Date(message.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
+      )
+    }
+
     if (isStickerMessage(message.content) || message.stickerData) {
       return (
         <Box sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 1 }}>
@@ -343,7 +389,7 @@ export default function ChatPage() {
       )
     }
     return (
-      <Box key={message.id} sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
+      <Box key={message.id} id={`msg-${message.id}`} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
         <Box sx={{ maxWidth: '72%', display: 'flex', gap: 1, alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
           {!isOwn && (
             <Avatar
@@ -417,7 +463,7 @@ export default function ChatPage() {
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
-              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0 }}>
+              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0, wordBreak: 'break-all', overflowWrap: 'break-word' }}>
                 <RichContent content={message.content} isOwn={isOwn} />
               </Box>
             )}
@@ -437,8 +483,6 @@ export default function ChatPage() {
               opacity: 0,
               transition: 'opacity 0.15s',
               alignSelf: 'center',
-              '&:hover': { opacity: 1 },
-              // parent hover reveal
             }}
             className="msg-actions"
           >
@@ -467,7 +511,7 @@ export default function ChatPage() {
             >
               <PushPinIcon sx={{ fontSize: 15, transform: message.pinned ? 'rotate(45deg)' : 'none' }} color={message.pinned ? 'warning' : 'inherit'} />
             </IconButton>
-            {message.userId === user.id && (
+            {message.userId === user.id && !message.hidden && (
               <IconButton size="small" title="Hapus pesan" onClick={() => hideMessage(message.id)}>
                 <DeleteOutlineIcon sx={{ fontSize: 15 }} />
               </IconButton>
@@ -498,17 +542,47 @@ export default function ChatPage() {
               onClick={() => setViewerUrl(att.url)}
             />
           ) : (
-            <Box
-              key={i}
-              component="button"
-              onClick={() =>
-                downloadAttachment(att.url, att.name).catch((e) =>
-                  alert(e instanceof Error ? e.message : 'Gagal mengunduh file')
-                )
-              }
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'inherit', bgcolor: 'rgba(0,0,0,0.25)', px: 1, py: 0.5, borderRadius: 1, border: 'none', cursor: 'pointer', textAlign: 'left' }}
-            >
-              📄 <Typography variant="caption" noWrap>{att.name}</Typography>
+            <Box key={i}>
+              <Box
+                component="button"
+                onClick={() => {
+                  if (downloadingFiles.has(att.url)) return
+                  setDownloadingFiles((prev) => new Set(prev).add(att.url))
+                  setDownloadProgress((prev) => new Map(prev).set(att.url, 0))
+                  downloadAttachment(att.url, att.name, (p) => {
+                    setDownloadProgress((prev) => new Map(prev).set(att.url, p))
+                  })
+                    .catch((e) => alert(e instanceof Error ? e.message : 'Gagal mengunduh file'))
+                    .finally(() => {
+                      setDownloadingFiles((prev) => {
+                        const next = new Set(prev)
+                        next.delete(att.url)
+                        return next
+                      })
+                      setDownloadProgress((prev) => {
+                        const next = new Map(prev)
+                        next.delete(att.url)
+                        return next
+                      })
+                    })
+                }}
+                disabled={downloadingFiles.has(att.url)}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'inherit', bgcolor: 'rgba(0,0,0,0.25)', px: 1, py: 0.5, borderRadius: 1, border: 'none', cursor: downloadingFiles.has(att.url) ? 'wait' : 'pointer', textAlign: 'left', opacity: downloadingFiles.has(att.url) ? 0.7 : 1, width: '100%' }}
+              >
+                {downloadingFiles.has(att.url) ? '⏳' : '📄'} <Typography variant="caption" noWrap>{att.name}</Typography>
+              </Box>
+              {downloadingFiles.has(att.url) && (
+                <Box sx={{ mt: 0.25 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={downloadProgress.get(att.url) ?? 0}
+                    sx={{ height: 4, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.1)', '& .MuiLinearProgress-bar': { borderRadius: 2 } }}
+                  />
+                  <Typography variant="caption" sx={{ fontSize: 10, opacity: 0.7, display: 'block', textAlign: 'right' }}>
+                    {downloadProgress.get(att.url) ?? 0}%
+                  </Typography>
+                </Box>
+              )}
             </Box>
           )
         )}
@@ -759,6 +833,7 @@ export default function ChatPage() {
                   <IconButton
                     size="small"
                     onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
+                    disabled={isUploading}
                     sx={{ position: 'absolute', top: 6, right: 6, bgcolor: 'rgba(0,0,0,0.65)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' }, width: 24, height: 24 }}
                   >
                     ✕
@@ -772,8 +847,28 @@ export default function ChatPage() {
               placeholder="Tambahkan keterangan…"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
+              disabled={isUploading}
               sx={{ mb: 0.5, maxWidth: 420, '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.06)' } }}
             />
+          </Box>
+        )}
+
+        {/* Upload progress bar */}
+        {isUploading && (
+          <Box sx={{ px: 2, py: 0.5, bgcolor: '#161320' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LinearProgress
+                variant="determinate"
+                value={uploadProgress}
+                sx={{ flexGrow: 1, height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.1)', '& .MuiLinearProgress-bar': { borderRadius: 3 } }}
+              />
+              <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 36, textAlign: 'right' }}>
+                {uploadProgress}%
+              </Typography>
+            </Box>
+            <Typography variant="caption" sx={{ opacity: 0.6, fontSize: 10 }}>
+              Mengunggah {pendingFiles.length} file…
+            </Typography>
           </Box>
         )}
 
