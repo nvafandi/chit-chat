@@ -27,9 +27,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: web
 
       - name: Build
         run: npm run build
+        working-directory: web
 
   deploy-preview:
     name: Deploy Preview (PR)
@@ -48,9 +50,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: web
 
       - name: Build
         run: npm run build
+        working-directory: web
 
       - name: Deploy to Preview Channel
         run: npx --yes firebase-tools hosting:channel:deploy pr-${{ github.event.pull_request.number }} --project chitchut-2b9e2-5000a --expires 7d
@@ -74,9 +78,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        working-directory: web
 
       - name: Build
         run: npm run build
+        working-directory: web
 
       - name: Deploy to Firebase Hosting
         run: npx --yes firebase-tools deploy --project chitchut-2b9e2-5000a

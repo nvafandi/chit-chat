@@ -22,6 +22,8 @@ import StopCircleIcon from '@mui/icons-material/StopCircle'
 import SendIcon from '@mui/icons-material/Send'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PhoneIcon from '@mui/icons-material/Phone'
+import NotificationsIcon from '@mui/icons-material/Notifications'
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff'
 import SettingsIcon from '@mui/icons-material/Settings'
 import PushPinIcon from '@mui/icons-material/PushPin'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
@@ -40,6 +42,12 @@ import MessageList from '@/components/MessageList'
 import CreateChannelDialog from '@/components/CreateChannelDialog'
 import ManageMembersDialog from '@/components/ManageMembersDialog'
 import LiveLocationBubble from '@/components/LiveLocationBubble'
+import {
+  isNotificationsEnabled,
+  setNotificationUserId,
+  setNotificationsEnabled,
+  startMessageNotifier,
+} from '@/services/notificationService'
 import {
   pinMessage,
   unpinMessage,
@@ -82,6 +90,17 @@ export default function ChatPage() {
   const [mention, setMention] = useState<{ mention: string; startIndex: number } | null>(null)
   const inputElRef = useRef<HTMLTextAreaElement | null>(null)
   const [isLiveTracking, setIsLiveTracking] = useState(false)
+  const [notifOn, setNotifOn] = useState(isNotificationsEnabled())
+
+  useEffect(() => {
+    if (!user) return
+    setNotificationUserId(user.id)
+    const stop = startMessageNotifier()
+    return () => {
+      stop()
+      setNotificationUserId(null)
+    }
+  }, [user])
   const liveMsgIdRef = useRef<string | null>(null)
   const watchIdRef = useRef<number | null>(null)
   const lastLocUpdateRef = useRef(0)
@@ -461,6 +480,18 @@ export default function ChatPage() {
             sx={{ width: 200, '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.06)' }, '& input': { py: 0.5, fontSize: 13 } }}
             slotProps={{ input: { startAdornment: <SearchIcon sx={{ fontSize: 16, mr: 0.5, color: '#949ba4' }} /> } }}
           />
+          <Tooltip title={notifOn ? 'Notifikasi aktif' : 'Aktifkan notifikasi'}>
+            <IconButton
+              size="small"
+              onClick={async () => {
+                const next = !notifOn
+                await setNotificationsEnabled(next)
+                setNotifOn(isNotificationsEnabled())
+              }}
+            >
+              {notifOn ? <NotificationsIcon sx={{ fontSize: 18 }} /> : <NotificationsOffIcon sx={{ fontSize: 18 }} />}
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Channel call">
             <IconButton size="small" onClick={() => setInCall(true)}>
               <PhoneIcon sx={{ fontSize: 18 }} />
