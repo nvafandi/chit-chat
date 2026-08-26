@@ -12,6 +12,7 @@ import {
   TextField,
   Tooltip,
   Badge,
+  Paper,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
@@ -21,6 +22,11 @@ import StopCircleIcon from '@mui/icons-material/StopCircle'
 import SendIcon from '@mui/icons-material/Send'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PhoneIcon from '@mui/icons-material/Phone'
+import SettingsIcon from '@mui/icons-material/Settings'
+import PushPinIcon from '@mui/icons-material/PushPin'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import SearchIcon from '@mui/icons-material/Search'
+import CloseIcon from '@mui/icons-material/Close'
 import LockIcon from '@mui/icons-material/Lock'
 import type { Message, ChatRoom } from '@/types'
 import { useAuthStore } from '@/stores/authStore'
@@ -31,6 +37,19 @@ import { compressImageMaximum, isCompressibleImage } from '@/utils/imageCompress
 import { DEFAULT_ROOM_ID } from '@/utils/const'
 import { formatAsSticker, isStickerMessage, type Sticker as StickerItem } from '@/utils/stickers'
 import MessageList from '@/components/MessageList'
+import CreateChannelDialog from '@/components/CreateChannelDialog'
+import ManageMembersDialog from '@/components/ManageMembersDialog'
+import {
+  pinMessage,
+  unpinMessage,
+  hideMessage,
+} from '@/services/firebase'
+import {
+  containsMentions,
+  convertMentionsToHtml,
+  getLastMentionBeingTyped,
+  insertMention,
+} from '@/utils/mentionFormatter'
 import StickerView from '@/components/StickerView'
 import StickerPicker from '@/components/StickerPicker'
 import LiveKitCall from '@/components/LiveKitCall'
@@ -56,6 +75,11 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [showStickers, setShowStickers] = useState(false)
   const [inCall, setInCall] = useState(false)
+  const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [manageRoom, setManageRoom] = useState<ChatRoom | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [mention, setMention] = useState<{ mention: string; startIndex: number } | null>(null)
+  const inputElRef = useRef<HTMLTextAreaElement | null>(null)
   const [isLiveTracking, setIsLiveTracking] = useState(false)
   const liveMsgIdRef = useRef<string | null>(null)
   const watchIdRef = useRef<number | null>(null)
@@ -203,6 +227,14 @@ export default function ChatPage() {
     )
   }
 
+  const pinnedMessages = messages.filter((m) => m.pinned)
+  const isSearching = searchQuery.trim().length >= 3
+  const visibleMessages = isSearching
+    ? messages.filter((m) =>
+        m.content.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : messages
+
   function renderMessage(message: Message) {
     const isOwn = message.userId === user.id
     if (isStickerMessage(message.content) || message.stickerData) {
@@ -241,13 +273,55 @@ export default function ChatPage() {
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
-              <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: message.attachments?.length ? 0.5 : 0 }}>
-                {message.content}
-              </Typography>
+              containsMentions(message.content) ? (
+                <Typography
+                  variant="body2"
+                  sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: message.attachments?.length ? 0.5 : 0, '& .mention-tag': { bgcolor: 'rgba(255,255,255,0.22)', color: isOwn ? '#fff' : '#c79fff', px: 0.5, borderRadius: 0.5, fontWeight: 700 } }}
+                  dangerouslySetInnerHTML={{ __html: convertMentionsToHtml(message.content) }}
+                />
+              ) : (
+                <Typography variant="body2" sx={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', mt: message.attachments?.length ? 0.5 : 0 }}>
+                  {message.content}
+                </Typography>
+              )
             )}
-            <Typography variant="caption" sx={{ opacity: 0.55, display: 'block', textAlign: 'right', fontSize: 10 }}>
-              {new Date(message.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+              <Typography variant="caption" sx={{ opacity: 0.55, fontSize: 10 }}>
+                {new Date(message.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+              </Typography>
+              {message.pinned && <PushPinIcon sx={{ fontSize: 11, transform: 'rotate(45deg)', opacity: 0.8 }} />}
+            </Box>
+          </Box>
+
+          {/* Hover actions */}
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 0.25,
+              opacity: 0,
+              transition: 'opacity 0.15s',
+              alignSelf: 'center',
+              '&:hover': { opacity: 1 },
+              // parent hover reveal
+            }}
+            className="msg-actions"
+          >
+            <IconButton
+              size="small"
+              title={message.pinned ? 'Lepas pin' : 'Pin pesan'}
+              onClick={() =>
+                message.pinned
+                  ? unpinMessage(message.id)
+                  : pinMessage(message.id, user.username)
+              }
+            >
+              <PushPinIcon sx={{ fontSize: 15, transform: message.pinned ? 'rotate(45deg)' : 'none' }} color={message.pinned ? 'warning' : 'inherit'} />
+            </IconButton>
+            {message.userId === user.id && (
+              <IconButton size="small" title="Hapus pesan" onClick={() => hideMessage(message.id)}>
+                <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+              </IconButton>
+            )}
           </Box>
         </Box>
       </Box>
@@ -323,8 +397,27 @@ export default function ChatPage() {
               <Typography component="span" sx={{ mr: 1, color: '#717171' }}>#</Typography>
               <ListItemText disableTypography primary={<Typography variant="body2" noWrap>{room.name}</Typography>} />
               {room.type === 'group' && <LockIcon sx={{ fontSize: 13, color: '#949ba4' }} />}
+              {room.id !== DEFAULT_ROOM_ID && (
+                <IconButton
+                  size="small"
+                  title={room.type === 'group' ? 'Kelola member' : 'Info channel'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setManageRoom(room)
+                  }}
+                >
+                  <SettingsIcon sx={{ fontSize: 14, color: '#949ba4' }} />
+                </IconButton>
+              )}
             </ListItemButton>
           ))}
+          <ListItemButton
+            onClick={() => setShowCreateChannel(true)}
+            sx={{ mx: 1, borderRadius: 1.5, color: '#949ba4' }}
+          >
+            <AddIcon sx={{ fontSize: 16, mr: 1 }} />
+            <Typography variant="body2">Buat Channel</Typography>
+          </ListItemButton>
         </List>
         <Box sx={{ p: 1.5, borderTop: '1px solid rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 1 }}>
           <Avatar src={user.photoUrl} sx={{ width: 30, height: 30, fontSize: 16 }}>
@@ -348,6 +441,14 @@ export default function ChatPage() {
             <Box sx={{ width: 8 }} />
           </Badge>
           <Box sx={{ flexGrow: 1 }} />
+          <TextField
+            size="small"
+            placeholder="Cari (min 3 huruf)…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ width: 200, '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.06)' }, '& input': { py: 0.5, fontSize: 13 } }}
+            slotProps={{ input: { startAdornment: <SearchIcon sx={{ fontSize: 16, mr: 0.5, color: '#949ba4' }} /> } }}
+          />
           <Tooltip title="Channel call">
             <IconButton size="small" onClick={() => setInCall(true)}>
               <PhoneIcon sx={{ fontSize: 18 }} />
@@ -355,8 +456,28 @@ export default function ChatPage() {
           </Tooltip>
         </Box>
 
+        {pinnedMessages.length > 0 && (
+          <Box sx={{ px: 2, py: 0.75, bgcolor: 'rgba(255,193,7,0.08)', borderBottom: '1px solid rgba(255,193,7,0.25)', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PushPinIcon sx={{ fontSize: 14, transform: 'rotate(45deg)', color: 'warning.main' }} />
+            <Typography variant="caption" noWrap sx={{ flexGrow: 1, color: 'text.secondary' }}>
+              {pinnedMessages.length} pesan dipin — terakhir:{' '}
+              <strong>{pinnedMessages[pinnedMessages.length - 1].content.slice(0, 80)}</strong>
+            </Typography>
+            <IconButton size="small" title="Lepas pin" onClick={() => unpinMessage(pinnedMessages[pinnedMessages.length - 1].id)}>
+              <CloseIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Box>
+        )}
+        {isSearching && (
+          <Box sx={{ px: 2, py: 0.5, bgcolor: 'action.hover' }}>
+            <Typography variant="caption" color="text.secondary">
+              {visibleMessages.length} hasil untuk "{searchQuery.trim()}"
+            </Typography>
+          </Box>
+        )}
+
         <MessageList
-          messages={messages}
+          messages={visibleMessages}
           renderItem={renderMessage}
           onLoadMore={() => useChatStore.getState().loadMore()}
           isLoadingMore={useChatStore((s) => s.isLoadingMore)}
@@ -397,36 +518,94 @@ export default function ChatPage() {
           <Tooltip title="Sticker">
             <IconButton onClick={() => setShowStickers(true)}><EmojiEmotionsIcon /></IconButton>
           </Tooltip>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={5}
-            size="small"
-            placeholder={`Message # ${roomName}`}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
-              }
-            }}
-          />
+          <Box sx={{ position: 'relative', flexGrow: 1 }}>
+            {mention && (
+              <Paper
+                elevation={4}
+                sx={{ position: 'absolute', bottom: '100%', left: 0, mb: 1, maxHeight: 200, overflowY: 'auto', minWidth: 220, zIndex: 10 }}
+              >
+                <List dense>
+                  {users
+                    .filter((u) =>
+                      u.username.toLowerCase().startsWith(mention.mention.toLowerCase())
+                    )
+                    .slice(0, 6)
+                    .map((u) => (
+                      <ListItemButton
+                        key={u.id}
+                        onClick={() => {
+                          const cursor = inputElRef.current?.selectionStart ?? input.length
+                          const res = insertMention(input, cursor, u.username)
+                          setInput(res.text)
+                          setMention(null)
+                          requestAnimationFrame(() =>
+                            inputElRef.current?.setSelectionRange(res.cursorPosition, res.cursorPosition)
+                          )
+                        }}
+                      >
+                        <Typography variant="body2">
+                          {u.animal ?? '🐾'} <strong>@{u.username}</strong>
+                        </Typography>
+                      </ListItemButton>
+                    ))}
+                  {users.filter((u) => u.username.toLowerCase().startsWith(mention.mention.toLowerCase())).length === 0 && (
+                    <ListItemButton disabled>
+                      <Typography variant="caption">Tidak ada user cocok</Typography>
+                    </ListItemButton>
+                  )}
+                </List>
+              </Paper>
+            )}
+            <TextField
+              fullWidth
+              multiline
+              maxRows={5}
+              size="small"
+              inputRef={inputElRef}
+              placeholder={`Message # ${roomName}`}
+              value={input}
+              onChange={(e) => {
+                const v = e.target.value
+                setInput(v)
+                const cursor = inputElRef.current?.selectionStart ?? v.length
+                setMention(getLastMentionBeingTyped(v, cursor))
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  setMention(null)
+                  handleSend()
+                }
+              }}
+            />
+          </Box>
           <Button variant="contained" onClick={handleSend} disabled={!input.trim() && pendingFiles.length === 0} sx={{ minWidth: 48, px: 1.5 }}>
             <SendIcon fontSize="small" />
           </Button>
         </Box>
       </Box>
 
-      {/* Add-channel quick action (phase 2: full dialog) */}
-      <Tooltip title="Add channel (coming soon)">
-        <IconButton
-          sx={{ position: 'fixed', bottom: 90, left: DRAWER_WIDTH / 2 - 20, display: { xs: 'none', md: 'inline-flex' } }}
-          size="small"
-        >
-          <AddIcon />
-        </IconButton>
-      </Tooltip>
+      {showCreateChannel && (
+        <CreateChannelDialog
+          open
+          onClose={() => setShowCreateChannel(false)}
+          onCreated={(room) => {
+            setShowCreateChannel(false)
+            handleSelectRoom(room)
+          }}
+          creator={{ id: user.id, username: user.username, animal: user.animal }}
+          allUsers={users.map((u) => ({ id: u.id, username: u.username, animal: u.animal }))}
+        />
+      )}
+
+      {manageRoom && (
+        <ManageMembersDialog
+          room={manageRoom}
+          currentUserId={user.id}
+          allUsers={users.map((u) => ({ id: u.id, username: u.username, animal: u.animal }))}
+          onClose={() => setManageRoom(null)}
+        />
+      )}
 
       <StickerPicker open={showStickers} onClose={() => setShowStickers(false)} onSelect={handleSelectSticker} />
 
