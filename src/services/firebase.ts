@@ -392,6 +392,7 @@ export function subscribeToMessages(callback: (messages: Message[]) => void, roo
     const q = query(
       collection(db, COLLECTIONS.MESSAGES),
       where('roomId', '==', roomId),
+      where('hidden', '!=', true),
       orderBy('timestamp', 'desc'),
       limit(MESSAGES_PER_PAGE)
     )

@@ -354,7 +354,7 @@ export default function ChatPage() {
       )
     }
     return (
-      <Box key={message.id} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
+      <Box key={message.id} id={`msg-${message.id}`} className="msg-row" sx={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start', my: 0.75 }}>
         <Box sx={{ maxWidth: '72%', display: 'flex', gap: 1, alignItems: 'flex-end', flexDirection: isOwn ? 'row-reverse' : 'row' }}>
           {!isOwn && (
             <Avatar
