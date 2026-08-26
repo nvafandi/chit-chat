@@ -69,6 +69,7 @@ import ImageViewer from '@/components/ImageViewer'
 import LiveRoomMap from '@/components/LiveRoomMap'
 import { subscribeToActiveRoomLocations } from '@/services/firebase'
 import MapIcon from '@mui/icons-material/Map'
+import { useThemeStore } from '@/stores/themeStore'
 
 interface PendingFile {
   file: File
@@ -553,6 +554,7 @@ export default function ChatPage() {
               <PhoneIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
+          <ThemeToggle />
         </Box>
 
         {pinnedMessages.length > 0 && (
@@ -793,5 +795,17 @@ export default function ChatPage() {
         />
       )}
     </Box>
+  )
+}
+
+function ThemeToggle() {
+  const mode = useThemeStore((s) => s.mode)
+  const toggle = useThemeStore((s) => s.toggle)
+  return (
+    <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
+      <IconButton size="small" onClick={toggle}>
+        {mode === 'dark' ? '☀️' : '🌙'}
+      </IconButton>
+    </Tooltip>
   )
 }

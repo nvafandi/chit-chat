@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { ThemeProvider, createTheme, CssBaseline, IconButton } from '@mui/material'
-import Brightness4Icon from '@mui/icons-material/Brightness4'
-import Brightness7Icon from '@mui/icons-material/Brightness7'
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material'
+import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useChatStore } from '@/stores/chatStore'
 import AuthPage from '@/pages/AuthPage'
@@ -13,9 +12,7 @@ export default function App() {
   const { user, restoreSession, isLoading } = useAuthStore()
   const connect = useChatStore((s) => s.connect)
   const disconnect = useChatStore((s) => s.disconnect)
-  const [mode, setMode] = useState<'dark' | 'light'>(
-    () => (localStorage.getItem('theme') as 'dark' | 'light') || 'dark'
-  )
+  const mode = useThemeStore((s) => s.mode)
 
   useEffect(() => {
     restoreSession()
@@ -41,12 +38,6 @@ export default function App() {
     [mode]
   )
 
-  function toggleMode() {
-    const next = mode === 'dark' ? 'light' : 'dark'
-    setMode(next)
-    localStorage.setItem('theme', next)
-  }
-
   if (isLoading && !user) {
     return (
       <ThemeProvider theme={theme}>
@@ -62,13 +53,6 @@ export default function App() {
     <ThemeProvider theme={theme}>
       <AppGate>
       <CssBaseline />
-      <IconButton
-        onClick={toggleMode}
-        sx={{ position: 'fixed', top: 12, right: 16, zIndex: 2000 }}
-        size="small"
-      >
-        {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
-      </IconButton>
       <BrowserRouter>
         <Routes>
           <Route path="/chat" element={user ? <ChatPage /> : <Navigate to="/login" replace />} />
