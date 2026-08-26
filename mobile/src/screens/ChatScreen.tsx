@@ -41,6 +41,7 @@ import { DEFAULT_ROOM_ID } from '@/utils/const';
 import LiveLocationBubble from '@/components/LiveLocationBubble';
 import StickerView from '@/components/StickerView';
 import StickerPicker from '@/components/StickerPicker';
+import CallScreen from '@/screens/CallScreen';
 import { formatAsSticker, isStickerMessage, type Sticker as StickerItem } from '@/utils/stickers';
 
 interface PendingFile {
@@ -73,6 +74,7 @@ export default function ChatScreen() {
   const [attachMenu, setAttachMenu] = useState(false);
   const [isLiveTracking, setIsLiveTracking] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
+  const [inCall, setInCall] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(true);
 
   // Notification setup: permission, Android channel, Firestore bridge
@@ -434,6 +436,9 @@ export default function ChatScreen() {
           </Text>
         </TouchableOpacity>
         <Text style={styles.headerSub}>{users.length} users</Text>
+        <TouchableOpacity onPress={() => setInCall(true)} hitSlop={10} style={{ marginRight: 12 }}>
+          <Text style={{ fontSize: 16 }}>📞</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={async () => {
             const next = !notifEnabled;
@@ -573,6 +578,18 @@ export default function ChatScreen() {
           )}
         </View>
       </Modal>
+
+      {/* Call overlay */}
+      {inCall && (
+        <Modal visible animationType="slide" onRequestClose={() => setInCall(false)}>
+          <CallScreen
+            roomName={`channel-${currentRoomId}`}
+            identity={`${user.id}-${Date.now()}`}
+            displayName={`${user.animal} ${user.username}`}
+            onLeave={() => setInCall(false)}
+          />
+        </Modal>
+      )}
 
       {/* Sticker picker */}
       <StickerPicker

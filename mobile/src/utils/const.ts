@@ -97,8 +97,16 @@ export const FIREBASE_CONFIG = {
 // ============================================================================
 // CALL CONFIGURATION
 // ============================================================================
-/** Jitsi Meet server domain used for channel calls */
+/** Jitsi Meet server domain used for channel calls (web) */
 export const JITSI_DOMAIN = 'meet.jit.si'
+
+// ============================================================================
+// LIVEKIT CONFIGURATION (mobile calls)
+// ============================================================================
+export const LIVEKIT_URL = 'wss://chit-chut-osejsjoz.livekit.cloud'
+export const LIVEKIT_API_KEY = 'APIPHJRFMrmbxBh'
+/** TODO: paste the API secret from LiveKit Cloud dashboard -> Keys */
+export const LIVEKIT_API_SECRET = 'v8kBzlGtppefenQeiZts1DyLUaKwQNZHm5hcxN3sE88D'
 
 // ============================================================================
 // DATABASE CONFIGURATION

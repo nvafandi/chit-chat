@@ -20,6 +20,15 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "@config-plugins/react-native-webrtc",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "enableScreenShareService": true
+        }
+      ]
+    ]
   }
 }
