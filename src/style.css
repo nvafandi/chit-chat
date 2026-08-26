@@ -141,6 +141,28 @@ html, body, #app {
   transition: background 0.3s, color 0.3s;
 }
 
+/* Mobile browser compatibility */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Remove blue tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth touch scrolling in chat areas */
+.messages-container,
+.live-map-fullscreen {
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);

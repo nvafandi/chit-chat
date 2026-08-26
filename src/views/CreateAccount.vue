@@ -852,21 +852,67 @@ async function handleRegister() {
 /* Responsive design */
 @media (max-width: 480px) {
   .auth-card {
-    max-width: 90%;
+    max-width: 92%;
     margin: 16px;
+    border-radius: 12px;
   }
 
   .avatar-section {
-    padding: 24px;
+    padding: 20px;
   }
 
   .avatar-circle {
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
   }
 
   .auth-content {
     padding: 16px;
+  }
+
+  :deep(.auth-form .v-text-field .v-field__input) {
+    font-size: 16px !important; /* Prevent iOS zoom */
+    padding: 10px 12px;
+  }
+
+  :deep(.auth-form .v-field) {
+    min-height: 46px;
+  }
+
+  .login-btn {
+    height: 48px !important;
+    font-size: 0.95rem;
+  }
+
+  :deep(.auth-tabs .v-tab) {
+    font-size: 0.8rem;
+    padding: 10px 6px !important;
+  }
+}
+
+/* Very small phones: <= 360px */
+@media (max-width: 360px) {
+  .auth-card {
+    max-width: 95%;
+    margin: 8px;
+  }
+
+  .avatar-section {
+    padding: 16px;
+  }
+
+  .avatar-circle {
+    width: 60px;
+    height: 60px;
+  }
+
+  .auth-content {
+    padding: 12px;
+  }
+
+  .no-wa-char {
+    font-size: 1.5rem;
+    padding: 4px 8px;
   }
 }
 </style>

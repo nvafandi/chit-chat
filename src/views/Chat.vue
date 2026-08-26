@@ -12,7 +12,7 @@
 
   <div class="chat-container" :class="{ 'light-mode': !isDark }">
     <!-- Channel Sidebar (Discord style) -->
-    <aside class="channel-sidebar" :class="{ open: isSidebarOpen }">
+    <aside class="channel-sidebar" :class="{ open: isSidebarOpen, hidden: !isSidebarVisible }">
       <div class="sidebar-server-header">
         <span class="server-name">CHIT CHuT</span>
         <v-icon size="16" class="server-chevron">mdi-chevron-down</v-icon>
@@ -77,7 +77,7 @@
           icon
           size="small"
           variant="text"
-          @click="isSidebarOpen = true"
+          @click="toggleSidebar"
         >
           <v-icon>mdi-menu</v-icon>
         </v-btn>
@@ -1043,6 +1043,15 @@ const theme = useTheme()
 
 const isDark = ref<boolean>(false)
 const isSidebarOpen = ref(false)
+const isSidebarVisible = ref(true)
+
+function toggleSidebar() {
+  if (window.innerWidth <= 900) {
+    isSidebarOpen.value = !isSidebarOpen.value
+  } else {
+    isSidebarVisible.value = !isSidebarVisible.value
+  }
+}
 const callActive = ref(false)
 const callUrl = ref('')
 
@@ -4133,7 +4142,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 2rem 2.5rem 1.5rem 2.5rem;
+  padding: 1.5rem 1rem 1rem 1rem;
   flex: 1;
 }
 
@@ -4354,7 +4363,7 @@ onUnmounted(() => {
 }
 
 .input-section {
-  padding: 0.4rem 0.75rem 0.6rem;
+  padding: 0.75rem 1rem 1rem;
   background-color: var(--bg-primary);
   border-top: 2px solid var(--border-accent);
   border-radius: 16px 16px 0 0;
@@ -5756,6 +5765,13 @@ onUnmounted(() => {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   height: 100vh;
   z-index: 1001;
+  transition: width 0.2s ease, transform 0.2s ease;
+}
+
+.channel-sidebar.hidden {
+  width: 0;
+  overflow: hidden;
+  border-right: none;
 }
 
 .sidebar-server-header {
@@ -5925,7 +5941,7 @@ onUnmounted(() => {
 }
 
 .sidebar-hamburger {
-  display: none;
+  display: inline-flex;
   color: #b5bac1 !important;
 }
 
@@ -6079,7 +6095,7 @@ onUnmounted(() => {
   align-items: flex-start;
   gap: 14px;
   width: 100%;
-  padding: 6px 24px 6px 24px;
+  padding: 6px 48px 6px 16px;
   position: relative;
   transition: background 0.1s;
 }
@@ -6270,10 +6286,6 @@ onUnmounted(() => {
     transform: translateX(0);
   }
 
-  .sidebar-hamburger {
-    display: inline-flex;
-  }
-
   .header-search :deep(.search-field) {
     width: 150px;
   }
@@ -6291,6 +6303,148 @@ onUnmounted(() => {
     width: 32px;
     height: 32px;
     font-size: 16px;
+  }
+
+  /* Safe area padding for notched phones */
+  .channel-header {
+    padding: 0 12px;
+    height: 48px;
+  }
+
+  .input-section {
+    padding: 0.4rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* Action buttons: minimum 44px touch targets */
+  :deep(.upload-btn),
+  :deep(.location-btn),
+  :deep(.live-toggle),
+  :deep(.send-btn) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  :deep(.sticker-btn) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+  }
+
+  /* Input text area */
+  .message-input-wrapper {
+    min-height: 40px;
+    border-radius: 20px;
+  }
+
+  :deep(.message-input textarea) {
+    font-size: 16px !important; /* Prevent iOS zoom on focus */
+    padding: 8px 12px !important;
+  }
+
+  /* Messages */
+  .messages-list {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .message-content-container {
+    max-width: 88%;
+  }
+
+  .message-card {
+    min-width: 80px;
+  }
+
+  /* Chat container fill remaining space */
+  .chat-main {
+    min-width: 0;
+  }
+
+  .chat-container {
+    flex-direction: column;
+  }
+
+  /* Hamburger always visible */
+  .sidebar-hamburger {
+    display: inline-flex !important;
+  }
+
+  /* Reply box */
+  .quoted-reply-box {
+    padding: 6px 8px;
+  }
+
+  .quoted-reply-content {
+    gap: 6px;
+  }
+
+  /* File preview on mobile */
+  .file-preview-card {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  /* Empty state */
+  .empty-state {
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .empty-state h3 {
+    font-size: 1rem;
+  }
+
+  .empty-state p {
+    font-size: 0.85rem;
+  }
+}
+
+/* Small phones: <= 380px */
+@media (max-width: 380px) {
+  .channel-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .channel-title {
+    font-size: 14px;
+  }
+
+  .header-icon-btn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+
+  :deep(.upload-btn),
+  :deep(.location-btn),
+  :deep(.live-toggle),
+  :deep(.send-btn) {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .message-content-container {
+    max-width: 92%;
+  }
+
+  .message-row {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+
+  .row-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+
+  .messages-list {
+    padding: 0.5rem 0.35rem;
   }
 }
 </style>
