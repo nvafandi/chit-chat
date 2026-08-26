@@ -107,7 +107,25 @@ export const useChatStore = create<ChatState>((set, getState) => ({
       unsubUsers = subscribeToUsers((users) => set({ users }))
     }
     if (!unsubRooms) {
-      unsubRooms = subscribeToRooms(userId, (rooms) => set({ rooms }))
+      unsubRooms = subscribeToRooms(userId, (rooms) => {
+        // 'General' is a virtual room (no Firestore doc) — always keep it first
+        const withGeneral: ChatRoom[] = rooms.some((r) => r.id === DEFAULT_ROOM_ID)
+          ? rooms
+          : [
+              {
+                id: DEFAULT_ROOM_ID,
+                name: 'General',
+                type: 'room',
+                createdBy: '',
+                createdByName: '',
+                members: [],
+                memberDetails: [],
+                createdAt: 0,
+              },
+              ...rooms,
+            ]
+        set({ rooms: withGeneral })
+      })
     }
   },
 
