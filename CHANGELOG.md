@@ -6,6 +6,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ---
 
+## [0.5.0] — 2026-08-27
+
+### Added
+- Upload progress bar with percentage (LinearProgress) during file upload
+- Download progress bar with percentage per file attachment
+- Spam prevention: download button disabled while downloading (⏳ icon)
+- Copy text button (📋) on plain text messages (top-right corner on hover)
+- Deleted messages show "Pesan ini telah dihapus" instead of disappearing
+- Real-time delete updates via Firestore onSnapshot
+- LiveKit connection error detection (Zscaler/firewall block) with user-friendly Snackbar
+
+### Changed
+- Upload progress weighted across multiple files
+- Disable remove/caption inputs during upload
+- Long text handling: word-break on CodeCard pre tag + plain text
+- Reply click: scroll to original message (id=msg-{messageId})
+- hideMessage now marks hidden=true (soft delete) instead of removing from UI
+
+### Fixed
+- Delete chat now realtime (no refresh needed)
+- Hover action buttons (reply, pin, delete) now show on message row hover
+- Chat messages not showing due to missing composite index (filter hidden in code)
+- Long messages (curl, URLs) no longer overflow
+
+### Security
+- Zscaler/firewall block detection for LiveKit WebSocket/ICE/TURN connections
+
+---
+
 ## [0.4.0] — 2026-08-27
 
 ### Added

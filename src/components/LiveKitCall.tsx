@@ -90,7 +90,7 @@ export default function LiveKitCall({ roomName, identity, displayName, onLeave, 
         onDisconnected={(reason) => {
           onLeave()
           if (reason) {
-            const msg = reason.toLowerCase()
+            const msg = String(reason).toLowerCase()
             if (msg.includes('websocket') || msg.includes('connection') || msg.includes('timeout') || msg.includes('blocked')) {
               setConnectionError('Koneksi diblokir (mungkin Zscaler/firewall). Coba nonaktifkan VPN/Proxy atau gunakan hotspot HP.')
             }
