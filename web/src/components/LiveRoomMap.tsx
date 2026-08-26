@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Box, Typography, IconButton, List, ListItem, ListItemAvatar, Avatar } from '@mui/material'
+import { Box, Typography, IconButton, List, ListItem, ListItemButton, ListItemAvatar, Avatar } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import MyLocationIcon from '@mui/icons-material/MyLocation'
 import { subscribeToActiveRoomLocations } from '@/services/firebase'
 import type { LiveLocation } from '@/types'
 
@@ -18,10 +19,14 @@ function colorFor(userId: string): string {
   return COLORS[h % COLORS.length]
 }
 
-function markerIcon(color: string, label: string) {
+function markerIcon(color: string, label: string, followed: boolean) {
+  const ring = followed
+    ? `<div class="live-marker-ring" style="border-color:${color}"></div>`
+    : ''
   return L.divIcon({
     className: 'live-marker',
-    html: `<div class="live-marker-dot" style="background:${color}"><div class="live-marker-pulse" style="background:${color}44"></div></div>
+    html: `<div class="live-marker-dot" style="background:${color};${followed ? 'transform:scale(1.3)' : ''}"><div class="live-marker-pulse" style="background:${color}44"></div></div>
+           ${ring}
            <div class="live-marker-label">${label}</div>`,
     iconSize: [20, 20],
     iconAnchor: [10, 10],
@@ -34,6 +39,11 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Map<string, L.Marker>>(new Map())
   const [sharers, setSharers] = useState<LiveLocation[]>([])
+  const [followingId, setFollowingId] = useState<string | null>(null)
+
+  const toggleFollow = useCallback((id: string) => {
+    setFollowingId((prev) => (prev === id ? null : id))
+  }, [])
 
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return
@@ -43,6 +53,18 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
     }).addTo(map)
     mapRef.current = map
 
+    return () => {
+      map.remove()
+      mapRef.current = null
+      markersRef.current.clear()
+    }
+  }, [roomId])
+
+  // Subscribe to locations + handle following
+  useEffect(() => {
+    if (!mapRef.current) return
+    const map = mapRef.current
+
     const unsub = subscribeToActiveRoomLocations(roomId, (locs) => {
       setSharers(locs)
       const markers = markersRef.current
@@ -51,12 +73,14 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
       for (const loc of locs) {
         seen.add(loc.id)
         const color = colorFor(loc.userId)
+        const isFollowed = followingId === loc.id
         const existing = markers.get(loc.id)
         if (existing) {
           existing.setLatLng([loc.latitude, loc.longitude])
+          existing.setIcon(markerIcon(color, loc.username, isFollowed))
         } else {
           const m = L.marker([loc.latitude, loc.longitude], {
-            icon: markerIcon(color, loc.username),
+            icon: markerIcon(color, loc.username, isFollowed),
           }).addTo(map)
           markers.set(loc.id, m)
         }
@@ -67,19 +91,22 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
           markers.delete(id)
         }
       }
-      if (locs.length > 0) {
+
+      // Follow mode: center on the followed user
+      if (followingId) {
+        const followed = locs.find((l) => l.id === followingId)
+        if (followed) {
+          map.setView([followed.latitude, followed.longitude], map.getZoom(), { animate: true })
+        }
+      } else if (locs.length > 0) {
+        // No one followed: fit all markers
         const bounds = L.latLngBounds(locs.map((l) => [l.latitude, l.longitude] as [number, number]))
         map.fitBounds(bounds.pad(0.35), { maxZoom: 16 })
       }
     })
 
-    return () => {
-      unsub()
-      map.remove()
-      mapRef.current = null
-      markersRef.current.clear()
-    }
-  }, [roomId])
+    return () => unsub()
+  }, [roomId, followingId])
 
   return (
     <Box sx={{ position: 'fixed', inset: 0, zIndex: 3000, bgcolor: '#121212', display: 'flex', flexDirection: 'column' }}>
@@ -95,23 +122,42 @@ export default function LiveRoomMap({ roomId, onClose }: Props) {
           <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
             {sharers.length} sedang share
           </Typography>
-          <List dense>
-            {sharers.map((s) => (
-              <ListItem key={s.id}>
-                <ListItemAvatar>
-                  <Avatar sx={{ width: 26, height: 26, fontSize: 13, bgcolor: colorFor(s.userId) }}>
-                    {s.animal ?? '🐾'}
-                  </Avatar>
-                </ListItemAvatar>
-                <Typography variant="body2" noWrap>{s.username}</Typography>
-              </ListItem>
-            ))}
+          <List dense disablePadding>
+            {sharers.map((s) => {
+              const isFollowed = followingId === s.id
+              return (
+                <ListItem key={s.id} disablePadding>
+                  <ListItemButton
+                    selected={isFollowed}
+                    onClick={() => toggleFollow(s.id)}
+                    sx={{ borderRadius: 1, px: 1, py: 0.5 }}
+                  >
+                    <ListItemAvatar sx={{ minWidth: 36 }}>
+                      <Avatar sx={{ width: 26, height: 26, fontSize: 13, bgcolor: colorFor(s.userId) }}>
+                        {s.animal ?? '🐾'}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <Typography variant="body2" noWrap sx={{ flexGrow: 1 }}>
+                      {s.username}
+                    </Typography>
+                    {isFollowed && (
+                      <MyLocationIcon sx={{ fontSize: 16, color: colorFor(s.userId) }} />
+                    )}
+                  </ListItemButton>
+                </ListItem>
+              )
+            })}
             {sharers.length === 0 && (
               <Typography variant="caption" sx={{ px: 2, display: 'block', mt: 1 }}>
                 Belum ada yang share. Mulai lewat tombol 🎯 di composer.
               </Typography>
             )}
           </List>
+          {followingId && (
+            <Typography variant="caption" sx={{ px: 1, display: 'block', mt: 1, color: '#4caf50' }}>
+              Mengikuti posisi… Klik lagi untuk berhenti.
+            </Typography>
+          )}
         </Box>
         <Box ref={mapEl} sx={{ flexGrow: 1 }} />
       </Box>

@@ -1,34 +1,10 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
 # Dependencies
-node_modules
-yarn.lock
-pnpm-lock.yaml
+node_modules/
 
 # Build output
-dist
-dist-ssr
+dist/
 *.local
-coverage
-.nyc_output
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.sln
-*.sw?
-*.sublime-workspace
-*.sublime-project
+coverage/
 
 # Environment variables
 .env
@@ -45,31 +21,12 @@ firebase-debug.log
 *.swp
 *.swo
 *~
-.project
-.classpath
-.c9/
-*.launch
-.settings/
 
-# OS specific
+# OS
 Thumbs.db
 .DS_Store
-.AppleDouble
-.LSOverride
-.Spotlight-V100
-.Trashes
 
-# IDE - VSCode
-.vscode-test
-.history/
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.swp
-
-# TypeScript build info
+# TypeScript
 *.tsbuildinfo
 
 # React Native / Expo

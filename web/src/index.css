@@ -63,3 +63,14 @@ body {
   border-radius: 4px;
   white-space: nowrap;
 }
+.live-marker-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid #4caf50;
+  animation: live-follow-ring 1.2s ease-in-out infinite;
+}
+@keyframes live-follow-ring {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
