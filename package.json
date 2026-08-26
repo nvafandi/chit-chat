@@ -1,5 +1,41 @@
 {
   "name": "chit-chat",
   "private": true,
-  "description": "Chat app with React web + React Native mobile"
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@livekit/components-react": "^2.9.24",
+    "@mui/icons-material": "^9.3.1",
+    "@mui/material": "^9.3.1",
+    "@supabase/supabase-js": "^2.109.0",
+    "crypto-js": "^4.2.0",
+    "firebase": "^10.14.1",
+    "leaflet": "^1.9.4",
+    "livekit-client": "^2.22.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2",
+    "uuid": "^9.0.1",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^6.1.0",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  }
 }
