@@ -463,7 +463,7 @@ export default function ChatPage() {
             )}
             {renderAttachments(message)}
             {!!message.content && !message.isLiveLocation && (
-              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0, wordBreak: 'break-all', overflowWrap: 'break-word' }}>
+              <Box sx={{ mt: message.attachments?.length ? 0.5 : 0, overflow: 'auto', maxHeight: 200, borderRadius: 2, p: 1, wordBreak: 'break-all', overflowWrap: 'break-word' }}>
                 <RichContent content={message.content} isOwn={isOwn} />
               </Box>
             )}
