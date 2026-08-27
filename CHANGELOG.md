@@ -29,6 +29,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Hover action buttons (reply, pin, delete) now show on message row hover
 - Chat messages not showing due to missing composite index (filter hidden in code)
 - Long messages (curl, URLs) no longer overflow
+- Type assertion for DisconnectReason.toLowerCase() in LiveKit call disconnect handler
 
 ### Security
 - Zscaler/firewall block detection for LiveKit WebSocket/ICE/TURN connections
